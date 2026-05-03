@@ -1,0 +1,139 @@
+name: Discord Repo Activity
+
+on:
+  push:
+    branches:
+      - main
+      - backend
+      - website
+      - app
+
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+
+  issues:
+    types:
+      - opened
+      - edited
+      - closed
+      - reopened
+      - assigned
+      - unassigned
+      - labeled
+      - unlabeled
+
+  issue_comment:
+    types:
+      - created
+
+  create:
+  delete:
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build Discord message
+        id: message
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+          REF_TYPE: ${{ github.event.ref_type }}
+          REF_VALUE: ${{ github.event.ref }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            TITLE="📦 Push"
+            DETAILS="**${ACTOR}** pushed to **${REPO}**\n**Branch:** ${REF_NAME}\n**Commit:** ${COMMIT_MESSAGE}\n${COMMIT_URL}"
+
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            if [ "$ACTION" = "closed" ] && [ "$PR_MERGED" = "true" ]; then
+              TITLE="✅ Pull Request Merged"
+            else
+              TITLE="🔀 Pull Request ${ACTION}"
+            fi
+            DETAILS="**${ACTOR}** ${ACTION} a pull request in **${REPO}**\n**Title:** ${PR_TITLE}\n${PR_URL}"
+
+          elif [ "$EVENT_NAME" = "issues" ]; then
+            TITLE="📝 Issue ${ACTION}"
+            DETAILS="**${ACTOR}** ${ACTION} an issue in **${REPO}**\n**Title:** ${ISSUE_TITLE}\n${ISSUE_URL}"
+
+          elif [ "$EVENT_NAME" = "issue_comment" ]; then
+            TITLE="💬 New Comment"
+            DETAILS="**${ACTOR}** commented in **${REPO}**\n**Issue/PR:** ${ISSUE_TITLE}\n${COMMENT_URL}"
+
+          elif [ "$EVENT_NAME" = "create" ]; then
+            TITLE="🌱 ${REF_TYPE} Created"
+            DETAILS="**${ACTOR}** created ${REF_TYPE} **${REF_VALUE}** in **${REPO}**"
+
+          elif [ "$EVENT_NAME" = "delete" ]; then
+            TITLE="🗑️ ${REF_TYPE} Deleted"
+            DETAILS="**${ACTOR}** deleted ${REF_TYPE} **${REF_VALUE}** in **${REPO}**"
+
+          else
+            TITLE="🔔 Repo Activity"
+            DETAILS="**${ACTOR}** triggered **${EVENT_NAME}** in **${REPO}**\n${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+          fi
+
+          {
+            echo "title<<EOF"
+            echo "$TITLE"
+            echo "EOF"
+            echo "details<<EOF"
+            echo "$DETAILS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CREW_ROLE_ID: ${{ secrets.CREW_ROLE_ID }}
+          TITLE: ${{ steps.message.outputs.title }}
+          DETAILS: ${{ steps.message.outputs.details }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          webhook_url = os.environ["DISCORD_WEBHOOK_URL"]
+          role_id = os.environ["CREW_ROLE_ID"]
+          title = os.environ["TITLE"]
+          details = os.environ["DETAILS"]
+
+          payload = {
+              "content": f"<@&{role_id}> **{title}**\n\n{details}",
+              "allowed_mentions": {
+                  "roles": [role_id]
+              }
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+
+          request = urllib.request.Request(
+              webhook_url,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+
+          with urllib.request.urlopen(request) as response:
+              print("Discord response:", response.status)
+          PY
