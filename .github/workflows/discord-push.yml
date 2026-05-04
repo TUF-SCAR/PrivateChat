@@ -133,7 +133,6 @@ jobs:
               payload = {
                   "content": content,
                   "embeds": [embed],
-                  "flags": 4,
                   "allowed_mentions": {
                       "parse": [],
                       "roles": [role_id] if role_id else []
