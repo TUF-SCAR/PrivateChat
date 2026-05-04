@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import APIRouter
 from pydantic import BaseModel
 from src.util import hashPassword
 from src.database import get_connection
@@ -11,10 +11,10 @@ class Registration(BaseModel):
     password: str
 
 
-app = FastAPI()
+router = APIRouter()
 
 
-@app.post("/register")
+@router.post("/register")
 def registration(user: Registration):
     username = user.username.strip()
     if username == "":
