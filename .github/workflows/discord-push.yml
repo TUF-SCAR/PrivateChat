@@ -49,6 +49,7 @@ jobs:
           import json
           import os
           import subprocess
+          import time
           import urllib.request
           import urllib.error
           from datetime import datetime, timezone
@@ -63,16 +64,35 @@ jobs:
           ref = os.environ["REF"]
           sha = os.environ["SHA"]
           run_url = os.environ["RUN_URL"]
-          backfill_commits = int(os.environ.get("BACKFILL_COMMITS") or "0")
+
+          try:
+              backfill_commits = int(os.environ.get("BACKFILL_COMMITS") or "0")
+          except ValueError:
+              backfill_commits = 0
 
           event_path = os.environ["GITHUB_EVENT_PATH"]
           with open(event_path, "r", encoding="utf-8") as file:
               event = json.load(file)
 
-          now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+          now_dt = datetime.now(timezone.utc)
+          now = now_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+          now_unix = int(now_dt.timestamp())
 
           def short_sha(value):
               return value[:7] if value else "unknown"
+
+          def discord_time(unix_timestamp):
+              return f"<t:{unix_timestamp}:R>"
+
+          def parse_github_time_to_unix(value):
+              if not value:
+                  return now_unix
+
+              try:
+                  fixed_value = value.replace("Z", "+00:00")
+                  return int(datetime.fromisoformat(fixed_value).timestamp())
+              except Exception:
+                  return now_unix
 
           def send_to_discord(message):
               prefix = f"<@&{role_id}> " if role_id else ""
@@ -105,40 +125,57 @@ jobs:
                   print(error.read().decode("utf-8"))
                   raise
 
-          def build_push_message():
+          def build_push_messages():
               commits = event.get("commits", [])
               compare_url = event.get("compare", "")
               pusher = event.get("pusher", {}).get("name", actor)
 
-              lines = [
-                  f"**GitHub Push**",
-                  f"**Repo:** `{repo}`",
-                  f"**Branch:** `{ref_name}`",
-                  f"**By:** `{pusher}` / GitHub actor `{actor}`",
-                  f"**Time:** `{now}`",
-                  f"**Commits:** `{len(commits)}`",
-                  "",
-              ]
+              messages = []
 
-              for commit in commits[:10]:
-                  commit_id = short_sha(commit.get("id", ""))
-                  message = commit.get("message", "").splitlines()[0]
+              if len(commits) == 0:
+                  messages.append("\n".join([
+                      "**GitHub Push**",
+                      f"**Repo:** `{repo}`",
+                      f"**Branch:** `{ref_name}`",
+                      f"**By:** `{pusher}` / GitHub actor `{actor}`",
+                      f"**Time:** `{now}` {discord_time(now_unix)}",
+                      "**Commits:** `0`",
+                      f"Compare: {compare_url}" if compare_url else "",
+                      f"Run: {run_url}",
+                  ]))
+                  return messages
+
+              for commit in commits:
+                  full_sha = commit.get("id", "")
+                  commit_id = short_sha(full_sha)
+                  message_title = commit.get("message", "").splitlines()[0]
                   author = commit.get("author", {}).get("name", "unknown")
-                  timestamp = commit.get("timestamp", "unknown time")
+                  timestamp = commit.get("timestamp", "")
+                  commit_unix = parse_github_time_to_unix(timestamp)
                   url = commit.get("url", "")
-                  lines.append(f"- `{commit_id}` **{message}** by `{author}` at `{timestamp}`")
+
+                  lines = [
+                      "**GitHub Push Commit**",
+                      f"**Repo:** `{repo}`",
+                      f"**Branch:** `{ref_name}`",
+                      f"**Pushed by:** `{pusher}` / GitHub actor `{actor}`",
+                      f"**Commit by:** `{author}`",
+                      f"**Time:** `{timestamp}` {discord_time(commit_unix)}",
+                      "",
+                      f"- `{commit_id}` **{message_title}**",
+                  ]
+
                   if url:
                       lines.append(f"  {url}")
 
-              if len(commits) > 10:
-                  lines.append(f"...and {len(commits) - 10} more commits.")
+                  if compare_url:
+                      lines.append(f"Compare: {compare_url}")
 
-              if compare_url:
-                  lines.append("")
-                  lines.append(f"Compare: {compare_url}")
+                  lines.append(f"Run: {run_url}")
 
-              lines.append(f"Run: {run_url}")
-              return "\n".join(lines)
+                  messages.append("\n".join(lines))
+
+              return messages
 
           def build_pull_request_message():
               pr = event.get("pull_request", {})
@@ -149,6 +186,8 @@ jobs:
               from_branch = pr.get("head", {}).get("ref", "unknown")
               to_branch = pr.get("base", {}).get("ref", "unknown")
               user = pr.get("user", {}).get("login", actor)
+              created_at = pr.get("updated_at") or pr.get("created_at")
+              event_unix = parse_github_time_to_unix(created_at)
 
               return "\n".join([
                   f"**GitHub Pull Request `{action}`**",
@@ -156,7 +195,7 @@ jobs:
                   f"**PR:** `#{number}` {title}",
                   f"**By:** `{user}`",
                   f"**Branch:** `{from_branch}` → `{to_branch}`",
-                  f"**Time:** `{now}`",
+                  f"**Time:** `{created_at or now}` {discord_time(event_unix)}",
                   url,
                   f"Run: {run_url}",
               ])
@@ -168,13 +207,15 @@ jobs:
               number = issue.get("number", "unknown")
               url = issue.get("html_url", "")
               user = issue.get("user", {}).get("login", actor)
+              created_at = issue.get("updated_at") or issue.get("created_at")
+              event_unix = parse_github_time_to_unix(created_at)
 
               return "\n".join([
                   f"**GitHub Issue `{action}`**",
                   f"**Repo:** `{repo}`",
                   f"**Issue:** `#{number}` {title}",
                   f"**By:** `{user}`",
-                  f"**Time:** `{now}`",
+                  f"**Time:** `{created_at or now}` {discord_time(event_unix)}",
                   url,
                   f"Run: {run_url}",
               ])
@@ -187,6 +228,9 @@ jobs:
               title = issue.get("title", "No title")
               url = comment.get("html_url", issue.get("html_url", ""))
               user = comment.get("user", {}).get("login", actor)
+              created_at = comment.get("updated_at") or comment.get("created_at")
+              event_unix = parse_github_time_to_unix(created_at)
+
               body = comment.get("body", "").replace("\n", " ")
               if len(body) > 300:
                   body = body[:300] + "..."
@@ -197,7 +241,7 @@ jobs:
                   f"**Issue/PR:** `#{number}` {title}",
                   f"**By:** `{user}`",
                   f"**Comment:** {body}",
-                  f"**Time:** `{now}`",
+                  f"**Time:** `{created_at or now}` {discord_time(event_unix)}",
                   url,
                   f"Run: {run_url}",
               ])
@@ -213,65 +257,83 @@ jobs:
                   f"**Type:** `{ref_type}`",
                   f"**Name:** `{event_ref}`",
                   f"**By:** `{actor}`",
-                  f"**Time:** `{now}`",
+                  f"**Time:** `{now}` {discord_time(now_unix)}",
                   f"Run: {run_url}",
               ])
 
-          def build_backfill_message():
+          def build_backfill_messages():
               output = subprocess.check_output(
                   [
                       "git",
                       "log",
                       f"-n{backfill_commits}",
-                      "--pretty=format:%H%x1f%an%x1f%ai%x1f%s"
+                      "--pretty=format:%H%x1f%an%x1f%ai%x1f%ct%x1f%s"
                   ],
                   text=True,
                   encoding="utf-8"
               )
 
-              lines = [
-                  f"**Manual Backfill: Last {backfill_commits} commit(s)**",
-                  f"**Repo:** `{repo}`",
-                  f"**Branch:** `{ref_name}`",
-                  f"**Triggered by:** `{actor}`",
-                  f"**Time:** `{now}`",
-                  "",
-              ]
+              messages = []
+
+              if output.strip() == "":
+                  messages.append("\n".join([
+                      "**Manual Backfill: No commit(s) found**",
+                      f"**Repo:** `{repo}`",
+                      f"**Branch:** `{ref_name}`",
+                      f"**Triggered by:** `{actor}`",
+                      f"**Time:** `{now}` {discord_time(now_unix)}",
+                      f"Run: {run_url}",
+                  ]))
+                  return messages
 
               for line in output.splitlines():
-                  full_sha, author, commit_time, subject = line.split("\x1f", 3)
+                  full_sha, author, commit_time, commit_unix, subject = line.split("\x1f", 4)
                   commit_url = f"https://github.com/{repo}/commit/{full_sha}"
-                  lines.append(f"- `{short_sha(full_sha)}` **{subject}** by `{author}` at `{commit_time}`")
-                  lines.append(f"  {commit_url}")
 
-              lines.append(f"Run: {run_url}")
-              return "\n".join(lines)
+                  message = "\n".join([
+                      "**Manual Backfill Commit**",
+                      f"**Repo:** `{repo}`",
+                      f"**Branch:** `{ref_name}`",
+                      f"**Triggered by:** `{actor}`",
+                      f"**Commit by:** `{author}`",
+                      f"**Time:** `{commit_time}` {discord_time(commit_unix)}",
+                      "",
+                      f"- `{short_sha(full_sha)}` **{subject}**",
+                      f"  {commit_url}",
+                      f"Run: {run_url}",
+                  ])
+
+                  messages.append(message)
+
+              return messages
 
           if event_name == "workflow_dispatch" and backfill_commits > 0:
-              message = build_backfill_message()
+              messages = build_backfill_messages()
           elif event_name == "push":
-              message = build_push_message()
+              messages = build_push_messages()
           elif event_name == "pull_request":
-              message = build_pull_request_message()
+              messages = [build_pull_request_message()]
           elif event_name == "issues":
-              message = build_issue_message()
+              messages = [build_issue_message()]
           elif event_name == "issue_comment":
-              message = build_issue_comment_message()
+              messages = [build_issue_comment_message()]
           elif event_name in ["create", "delete"]:
-              message = build_create_delete_message()
+              messages = [build_create_delete_message()]
           else:
-              message = "\n".join([
+              messages = ["\n".join([
                   f"**GitHub Event:** `{event_name}`",
                   f"**Repo:** `{repo}`",
                   f"**Branch/ref:** `{ref}`",
                   f"**By:** `{actor}`",
                   f"**Commit:** `{short_sha(sha)}`",
-                  f"**Time:** `{now}`",
+                  f"**Time:** `{now}` {discord_time(now_unix)}",
                   f"Run: {run_url}",
-              ])
+              ])]
 
-          if len(message) > 1900:
-              message = message[:1900] + "\n\nMessage trimmed because it was too long."
+          for message in messages:
+              if len(message) > 1900:
+                  message = message[:1900] + "\n\nMessage trimmed because it was too long."
 
-          send_to_discord(message)
+              send_to_discord(message)
+              time.sleep(1)
           PY
