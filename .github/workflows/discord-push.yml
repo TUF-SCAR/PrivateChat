@@ -78,11 +78,27 @@ jobs:
           now = now_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
           now_unix = int(now_dt.timestamp())
 
+          BLUE = 5814783
+          GREEN = 5763719
+          ORANGE = 16753920
+          RED = 15548997
+          PURPLE = 10181046
+          GRAY = 9807270
+
           def short_sha(value):
               return value[:7] if value else "unknown"
 
           def discord_time(unix_timestamp):
               return f"<t:{unix_timestamp}:R>"
+
+          def safe_value(value, fallback="unknown"):
+              if value is None:
+                  return fallback
+              value = str(value).strip()
+              return value if value else fallback
+
+          def first_line(value):
+              return safe_value(value).splitlines()[0]
 
           def parse_github_time_to_unix(value):
               if not value:
@@ -94,11 +110,30 @@ jobs:
               except Exception:
                   return now_unix
 
-          def send_to_discord(message):
-              prefix = f"<@&{role_id}> " if role_id else ""
+          def make_embed(title, description, color, url=None, fields=None, footer=None, timestamp=None):
+              embed = {
+                  "title": title,
+                  "description": description,
+                  "color": color,
+                  "fields": fields or [],
+                  "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+              }
+
+              if url:
+                  embed["url"] = url
+
+              if footer:
+                  embed["footer"] = {"text": footer}
+
+              return embed
+
+          def send_to_discord(embed):
+              content = f"<@&{role_id}>" if role_id else ""
 
               payload = {
-                  "content": prefix + message,
+                  "content": content,
+                  "embeds": [embed],
+                  "flags": 4,
                   "allowed_mentions": {
                       "parse": [],
                       "roles": [role_id] if role_id else []
@@ -125,59 +160,105 @@ jobs:
                   print(error.read().decode("utf-8"))
                   raise
 
-          def build_push_messages():
+          def workflow_field():
+              return {
+                  "name": "Workflow",
+                  "value": f"[Open workflow run]({run_url})",
+                  "inline": False
+              }
+
+          def build_commit_embed(title, full_sha, subject, commit_url, branch, commit_author, pusher, commit_time, commit_unix, extra_footer):
+              description = f"`{short_sha(full_sha)}` **{safe_value(subject)}**"
+
+              fields = [
+                  {
+                      "name": "Repository",
+                      "value": f"`{repo}`",
+                      "inline": False
+                  },
+                  {
+                      "name": "Branch",
+                      "value": f"`{safe_value(branch)}`",
+                      "inline": True
+                  },
+                  {
+                      "name": "Commit by",
+                      "value": f"`{safe_value(commit_author)}`",
+                      "inline": True
+                  },
+                  {
+                      "name": "Triggered by",
+                      "value": f"`{safe_value(pusher)}`",
+                      "inline": True
+                  },
+                  {
+                      "name": "Commit",
+                      "value": f"`{short_sha(full_sha)}`",
+                      "inline": True
+                  },
+                  {
+                      "name": "Time",
+                      "value": f"`{safe_value(commit_time)}`\n{discord_time(commit_unix)}",
+                      "inline": False
+                  },
+                  workflow_field(),
+              ]
+
+              return make_embed(
+                  title=title,
+                  description=description,
+                  color=GREEN,
+                  url=commit_url,
+                  fields=fields,
+                  footer=extra_footer,
+              )
+
+          def build_push_embeds():
               commits = event.get("commits", [])
-              compare_url = event.get("compare", "")
               pusher = event.get("pusher", {}).get("name", actor)
 
-              messages = []
+              embeds = []
 
               if len(commits) == 0:
-                  messages.append("\n".join([
-                      "**GitHub Push**",
-                      f"**Repo:** `{repo}`",
-                      f"**Branch:** `{ref_name}`",
-                      f"**By:** `{pusher}` / GitHub actor `{actor}`",
-                      f"**Time:** `{now}` {discord_time(now_unix)}",
-                      "**Commits:** `0`",
-                      f"Compare: {compare_url}" if compare_url else "",
-                      f"Run: {run_url}",
-                  ]))
-                  return messages
+                  embeds.append(make_embed(
+                      title="GitHub Push",
+                      description="Push event received, but no commit data was included.",
+                      color=BLUE,
+                      fields=[
+                          {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                          {"name": "Branch", "value": f"`{ref_name}`", "inline": True},
+                          {"name": "Pushed by", "value": f"`{pusher}`", "inline": True},
+                          {"name": "Time", "value": f"`{now}`\n{discord_time(now_unix)}", "inline": False},
+                          workflow_field(),
+                      ],
+                      footer=f"GitHub actor: {actor}"
+                  ))
+                  return embeds
 
               for commit in commits:
-                  full_sha = commit.get("id", "")
-                  commit_id = short_sha(full_sha)
-                  message_title = commit.get("message", "").splitlines()[0]
+                  full_sha = safe_value(commit.get("id", ""), "")
+                  subject = first_line(commit.get("message", "No commit message"))
                   author = commit.get("author", {}).get("name", "unknown")
                   timestamp = commit.get("timestamp", "")
                   commit_unix = parse_github_time_to_unix(timestamp)
-                  url = commit.get("url", "")
+                  commit_url = commit.get("url", "")
 
-                  lines = [
-                      "**GitHub Push Commit**",
-                      f"**Repo:** `{repo}`",
-                      f"**Branch:** `{ref_name}`",
-                      f"**Pushed by:** `{pusher}` / GitHub actor `{actor}`",
-                      f"**Commit by:** `{author}`",
-                      f"**Time:** `{timestamp}` {discord_time(commit_unix)}",
-                      "",
-                      f"- `{commit_id}` **{message_title}**",
-                  ]
+                  embeds.append(build_commit_embed(
+                      title="GitHub Push Commit",
+                      full_sha=full_sha,
+                      subject=subject,
+                      commit_url=commit_url,
+                      branch=ref_name,
+                      commit_author=author,
+                      pusher=pusher,
+                      commit_time=timestamp,
+                      commit_unix=commit_unix,
+                      extra_footer=f"Push event • GitHub actor: {actor}",
+                  ))
 
-                  if url:
-                      lines.append(f"  {url}")
+              return embeds
 
-                  if compare_url:
-                      lines.append(f"Compare: {compare_url}")
-
-                  lines.append(f"Run: {run_url}")
-
-                  messages.append("\n".join(lines))
-
-              return messages
-
-          def build_pull_request_message():
+          def build_pull_request_embed():
               pr = event.get("pull_request", {})
               action = event.get("action", "unknown")
               title = pr.get("title", "No title")
@@ -186,41 +267,66 @@ jobs:
               from_branch = pr.get("head", {}).get("ref", "unknown")
               to_branch = pr.get("base", {}).get("ref", "unknown")
               user = pr.get("user", {}).get("login", actor)
-              created_at = pr.get("updated_at") or pr.get("created_at")
-              event_unix = parse_github_time_to_unix(created_at)
+              state = pr.get("state", "unknown")
+              merged = pr.get("merged", False)
+              changed_files = pr.get("changed_files", "unknown")
+              additions = pr.get("additions", "unknown")
+              deletions = pr.get("deletions", "unknown")
+              updated_at = pr.get("updated_at") or pr.get("created_at")
+              event_unix = parse_github_time_to_unix(updated_at)
 
-              return "\n".join([
-                  f"**GitHub Pull Request `{action}`**",
-                  f"**Repo:** `{repo}`",
-                  f"**PR:** `#{number}` {title}",
-                  f"**By:** `{user}`",
-                  f"**Branch:** `{from_branch}` → `{to_branch}`",
-                  f"**Time:** `{created_at or now}` {discord_time(event_unix)}",
-                  url,
-                  f"Run: {run_url}",
-              ])
+              status_text = f"`{state}`"
+              if merged:
+                  status_text += " / `merged`"
 
-          def build_issue_message():
+              return make_embed(
+                  title=f"Pull Request {action}",
+                  description=f"`#{number}` **{title}**",
+                  color=PURPLE,
+                  url=url,
+                  fields=[
+                      {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                      {"name": "By", "value": f"`{user}`", "inline": True},
+                      {"name": "Status", "value": status_text, "inline": True},
+                      {"name": "From", "value": f"`{from_branch}`", "inline": True},
+                      {"name": "To", "value": f"`{to_branch}`", "inline": True},
+                      {"name": "Files changed", "value": f"`{changed_files}`", "inline": True},
+                      {"name": "Changes", "value": f"`+{additions}` / `-{deletions}`", "inline": True},
+                      {"name": "Time", "value": f"`{safe_value(updated_at, now)}`\n{discord_time(event_unix)}", "inline": False},
+                      workflow_field(),
+                  ],
+                  footer=f"GitHub actor: {actor}"
+              )
+
+          def build_issue_embed():
               issue = event.get("issue", {})
               action = event.get("action", "unknown")
               title = issue.get("title", "No title")
               number = issue.get("number", "unknown")
               url = issue.get("html_url", "")
               user = issue.get("user", {}).get("login", actor)
-              created_at = issue.get("updated_at") or issue.get("created_at")
-              event_unix = parse_github_time_to_unix(created_at)
+              state = issue.get("state", "unknown")
+              comments = issue.get("comments", "unknown")
+              updated_at = issue.get("updated_at") or issue.get("created_at")
+              event_unix = parse_github_time_to_unix(updated_at)
 
-              return "\n".join([
-                  f"**GitHub Issue `{action}`**",
-                  f"**Repo:** `{repo}`",
-                  f"**Issue:** `#{number}` {title}",
-                  f"**By:** `{user}`",
-                  f"**Time:** `{created_at or now}` {discord_time(event_unix)}",
-                  url,
-                  f"Run: {run_url}",
-              ])
+              return make_embed(
+                  title=f"Issue {action}",
+                  description=f"`#{number}` **{title}**",
+                  color=ORANGE,
+                  url=url,
+                  fields=[
+                      {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                      {"name": "By", "value": f"`{user}`", "inline": True},
+                      {"name": "State", "value": f"`{state}`", "inline": True},
+                      {"name": "Comments", "value": f"`{comments}`", "inline": True},
+                      {"name": "Time", "value": f"`{safe_value(updated_at, now)}`\n{discord_time(event_unix)}", "inline": False},
+                      workflow_field(),
+                  ],
+                  footer=f"GitHub actor: {actor}"
+              )
 
-          def build_issue_comment_message():
+          def build_issue_comment_embed():
               action = event.get("action", "unknown")
               issue = event.get("issue", {})
               comment = event.get("comment", {})
@@ -228,112 +334,158 @@ jobs:
               title = issue.get("title", "No title")
               url = comment.get("html_url", issue.get("html_url", ""))
               user = comment.get("user", {}).get("login", actor)
-              created_at = comment.get("updated_at") or comment.get("created_at")
-              event_unix = parse_github_time_to_unix(created_at)
+              updated_at = comment.get("updated_at") or comment.get("created_at")
+              event_unix = parse_github_time_to_unix(updated_at)
 
               body = comment.get("body", "").replace("\n", " ")
-              if len(body) > 300:
-                  body = body[:300] + "..."
+              if len(body) > 500:
+                  body = body[:500] + "..."
 
-              return "\n".join([
-                  f"**GitHub Issue Comment `{action}`**",
-                  f"**Repo:** `{repo}`",
-                  f"**Issue/PR:** `#{number}` {title}",
-                  f"**By:** `{user}`",
-                  f"**Comment:** {body}",
-                  f"**Time:** `{created_at or now}` {discord_time(event_unix)}",
-                  url,
-                  f"Run: {run_url}",
-              ])
+              return make_embed(
+                  title=f"Issue Comment {action}",
+                  description=f"`#{number}` **{title}**",
+                  color=BLUE,
+                  url=url,
+                  fields=[
+                      {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                      {"name": "By", "value": f"`{user}`", "inline": True},
+                      {"name": "Comment", "value": safe_value(body, "No comment body"), "inline": False},
+                      {"name": "Time", "value": f"`{safe_value(updated_at, now)}`\n{discord_time(event_unix)}", "inline": False},
+                      workflow_field(),
+                  ],
+                  footer=f"GitHub actor: {actor}"
+              )
 
-          def build_create_delete_message():
+          def build_create_delete_embed():
               action = "created" if event_name == "create" else "deleted"
               ref_type = event.get("ref_type", "unknown")
               event_ref = event.get("ref", ref_name)
+              color = GREEN if event_name == "create" else RED
 
-              return "\n".join([
-                  f"**GitHub Ref `{action}`**",
-                  f"**Repo:** `{repo}`",
-                  f"**Type:** `{ref_type}`",
-                  f"**Name:** `{event_ref}`",
-                  f"**By:** `{actor}`",
-                  f"**Time:** `{now}` {discord_time(now_unix)}",
-                  f"Run: {run_url}",
-              ])
+              return make_embed(
+                  title=f"GitHub Ref {action}",
+                  description=f"`{ref_type}` **{event_ref}**",
+                  color=color,
+                  fields=[
+                      {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                      {"name": "Type", "value": f"`{ref_type}`", "inline": True},
+                      {"name": "Name", "value": f"`{event_ref}`", "inline": True},
+                      {"name": "By", "value": f"`{actor}`", "inline": True},
+                      {"name": "Time", "value": f"`{now}`\n{discord_time(now_unix)}", "inline": False},
+                      workflow_field(),
+                  ],
+                  footer=f"GitHub actor: {actor}"
+              )
 
-          def build_backfill_messages():
+          def build_backfill_embeds():
               output = subprocess.check_output(
                   [
                       "git",
                       "log",
                       f"-n{backfill_commits}",
+                      "--reverse",
                       "--pretty=format:%H%x1f%an%x1f%ai%x1f%ct%x1f%s"
                   ],
                   text=True,
                   encoding="utf-8"
               )
 
-              messages = []
+              embeds = []
 
               if output.strip() == "":
-                  messages.append("\n".join([
-                      "**Manual Backfill: No commit(s) found**",
-                      f"**Repo:** `{repo}`",
-                      f"**Branch:** `{ref_name}`",
-                      f"**Triggered by:** `{actor}`",
-                      f"**Time:** `{now}` {discord_time(now_unix)}",
-                      f"Run: {run_url}",
-                  ]))
-                  return messages
+                  embeds.append(make_embed(
+                      title="Manual Backfill",
+                      description="No commits found for this branch/range.",
+                      color=GRAY,
+                      fields=[
+                          {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                          {"name": "Branch", "value": f"`{ref_name}`", "inline": True},
+                          {"name": "Requested commits", "value": f"`{backfill_commits}`", "inline": True},
+                          {"name": "Triggered by", "value": f"`{actor}`", "inline": True},
+                          {"name": "Time", "value": f"`{now}`\n{discord_time(now_unix)}", "inline": False},
+                          workflow_field(),
+                      ],
+                      footer="Manual workflow dispatch"
+                  ))
+                  return embeds
 
               for line in output.splitlines():
                   full_sha, author, commit_time, commit_unix, subject = line.split("\x1f", 4)
                   commit_url = f"https://github.com/{repo}/commit/{full_sha}"
 
-                  message = "\n".join([
-                      "**Manual Backfill Commit**",
-                      f"**Repo:** `{repo}`",
-                      f"**Branch:** `{ref_name}`",
-                      f"**Triggered by:** `{actor}`",
-                      f"**Commit by:** `{author}`",
-                      f"**Time:** `{commit_time}` {discord_time(commit_unix)}",
-                      "",
-                      f"- `{short_sha(full_sha)}` **{subject}**",
-                      f"  {commit_url}",
-                      f"Run: {run_url}",
-                  ])
+                  fields = [
+                      {
+                          "name": "Repository",
+                          "value": f"`{repo}`",
+                          "inline": False
+                      },
+                      {
+                          "name": "Branch",
+                          "value": f"`{ref_name}`",
+                          "inline": True
+                      },
+                      {
+                          "name": "Commit by",
+                          "value": f"`{safe_value(author)}`",
+                          "inline": True
+                      },
+                      {
+                          "name": "Triggered by",
+                          "value": f"`{actor}`",
+                          "inline": True
+                      },
+                      {
+                          "name": "Commit",
+                          "value": f"`{short_sha(full_sha)}`",
+                          "inline": True
+                      },
+                      {
+                          "name": "Time",
+                          "value": f"`{commit_time}`\n{discord_time(commit_unix)}",
+                          "inline": False
+                      },
+                      workflow_field(),
+                  ]
 
-                  messages.append(message)
+                  embeds.append(make_embed(
+                      title="Manual Backfill Commit",
+                      description=f"`{short_sha(full_sha)}` **{safe_value(subject)}**",
+                      color=GREEN,
+                      url=commit_url,
+                      fields=fields,
+                      footer="Oldest selected commit sent first"
+                  ))
 
-              return messages
+              return embeds
 
           if event_name == "workflow_dispatch" and backfill_commits > 0:
-              messages = build_backfill_messages()
+              embeds = build_backfill_embeds()
           elif event_name == "push":
-              messages = build_push_messages()
+              embeds = build_push_embeds()
           elif event_name == "pull_request":
-              messages = [build_pull_request_message()]
+              embeds = [build_pull_request_embed()]
           elif event_name == "issues":
-              messages = [build_issue_message()]
+              embeds = [build_issue_embed()]
           elif event_name == "issue_comment":
-              messages = [build_issue_comment_message()]
+              embeds = [build_issue_comment_embed()]
           elif event_name in ["create", "delete"]:
-              messages = [build_create_delete_message()]
+              embeds = [build_create_delete_embed()]
           else:
-              messages = ["\n".join([
-                  f"**GitHub Event:** `{event_name}`",
-                  f"**Repo:** `{repo}`",
-                  f"**Branch/ref:** `{ref}`",
-                  f"**By:** `{actor}`",
-                  f"**Commit:** `{short_sha(sha)}`",
-                  f"**Time:** `{now}` {discord_time(now_unix)}",
-                  f"Run: {run_url}",
-              ])]
+              embeds = [make_embed(
+                  title=f"GitHub Event: {event_name}",
+                  description=f"`{short_sha(sha)}` event received.",
+                  color=GRAY,
+                  fields=[
+                      {"name": "Repository", "value": f"`{repo}`", "inline": False},
+                      {"name": "Branch/ref", "value": f"`{ref}`", "inline": False},
+                      {"name": "By", "value": f"`{actor}`", "inline": True},
+                      {"name": "Time", "value": f"`{now}`\n{discord_time(now_unix)}", "inline": False},
+                      workflow_field(),
+                  ],
+                  footer=f"GitHub actor: {actor}"
+              )]
 
-          for message in messages:
-              if len(message) > 1900:
-                  message = message[:1900] + "\n\nMessage trimmed because it was too long."
-
-              send_to_discord(message)
+          for embed in embeds:
+              send_to_discord(embed)
               time.sleep(1)
           PY
