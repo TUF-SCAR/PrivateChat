@@ -1,46 +1,277 @@
+name: Discord Repo Activity
+
+on:
+  push:
+  pull_request:
+    types: [opened, reopened, synchronize, closed, ready_for_review]
+  issues:
+    types: [opened, edited, closed, reopened, assigned, unassigned, labeled, unlabeled]
+  issue_comment:
+    types: [created, edited, deleted]
+  create:
+  delete:
+  workflow_dispatch:
+    inputs:
+      backfill_commits:
+        description: "How many recent commits to send now"
+        required: false
+        default: "0"
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
       - name: Send Discord notification
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CREW_ROLE_ID: ${{ secrets.CREW_ROLE_ID }}
-          TITLE: ${{ steps.message.outputs.title }}
-          DETAILS: ${{ steps.message.outputs.details }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BACKFILL_COMMITS: ${{ github.event.inputs.backfill_commits || '0' }}
         run: |
           python - <<'PY'
           import json
           import os
+          import subprocess
           import urllib.request
           import urllib.error
+          from datetime import datetime, timezone
 
           webhook_url = os.environ["DISCORD_WEBHOOK_URL"].strip()
-          role_id = os.environ["CREW_ROLE_ID"].strip()
-          title = os.environ["TITLE"]
-          details = os.environ["DETAILS"]
+          role_id = os.environ.get("CREW_ROLE_ID", "").strip()
 
-          payload = {
-              "content": f"<@&{role_id}> **{title}**\n\n{details}",
-              "allowed_mentions": {
-                  "parse": [],
-                  "roles": [role_id]
+          event_name = os.environ["EVENT_NAME"]
+          actor = os.environ["ACTOR"]
+          repo = os.environ["REPOSITORY"]
+          ref_name = os.environ["REF_NAME"]
+          ref = os.environ["REF"]
+          sha = os.environ["SHA"]
+          run_url = os.environ["RUN_URL"]
+          backfill_commits = int(os.environ.get("BACKFILL_COMMITS") or "0")
+
+          event_path = os.environ["GITHUB_EVENT_PATH"]
+          with open(event_path, "r", encoding="utf-8") as file:
+              event = json.load(file)
+
+          now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+          def short_sha(value):
+              return value[:7] if value else "unknown"
+
+          def send_to_discord(message):
+              prefix = f"<@&{role_id}> " if role_id else ""
+
+              payload = {
+                  "content": prefix + message,
+                  "allowed_mentions": {
+                      "parse": [],
+                      "roles": [role_id] if role_id else []
+                  }
               }
-          }
 
-          data = json.dumps(payload).encode("utf-8")
+              data = json.dumps(payload).encode("utf-8")
 
-          request = urllib.request.Request(
-              webhook_url,
-              data=data,
-              headers={
-                  "Content-Type": "application/json",
-                  "User-Agent": "GitHub-Actions-Discord-Webhook"
-              },
-              method="POST",
-          )
+              request = urllib.request.Request(
+                  webhook_url,
+                  data=data,
+                  headers={
+                      "Content-Type": "application/json",
+                      "User-Agent": "GitHub-Actions-Discord-Webhook"
+                  },
+                  method="POST",
+              )
 
-          try:
-              with urllib.request.urlopen(request) as response:
-                  print("Discord response:", response.status)
-          except urllib.error.HTTPError as error:
-              print("Discord HTTP error:", error.code)
-              print(error.read().decode("utf-8"))
-              raise
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      print("Discord response:", response.status)
+              except urllib.error.HTTPError as error:
+                  print("Discord HTTP error:", error.code)
+                  print(error.read().decode("utf-8"))
+                  raise
+
+          def build_push_message():
+              commits = event.get("commits", [])
+              compare_url = event.get("compare", "")
+              pusher = event.get("pusher", {}).get("name", actor)
+
+              lines = [
+                  f"**GitHub Push**",
+                  f"**Repo:** `{repo}`",
+                  f"**Branch:** `{ref_name}`",
+                  f"**By:** `{pusher}` / GitHub actor `{actor}`",
+                  f"**Time:** `{now}`",
+                  f"**Commits:** `{len(commits)}`",
+                  "",
+              ]
+
+              for commit in commits[:10]:
+                  commit_id = short_sha(commit.get("id", ""))
+                  message = commit.get("message", "").splitlines()[0]
+                  author = commit.get("author", {}).get("name", "unknown")
+                  timestamp = commit.get("timestamp", "unknown time")
+                  url = commit.get("url", "")
+                  lines.append(f"- `{commit_id}` **{message}** by `{author}` at `{timestamp}`")
+                  if url:
+                      lines.append(f"  {url}")
+
+              if len(commits) > 10:
+                  lines.append(f"...and {len(commits) - 10} more commits.")
+
+              if compare_url:
+                  lines.append("")
+                  lines.append(f"Compare: {compare_url}")
+
+              lines.append(f"Run: {run_url}")
+              return "\n".join(lines)
+
+          def build_pull_request_message():
+              pr = event.get("pull_request", {})
+              action = event.get("action", "unknown")
+              title = pr.get("title", "No title")
+              number = pr.get("number", "unknown")
+              url = pr.get("html_url", "")
+              from_branch = pr.get("head", {}).get("ref", "unknown")
+              to_branch = pr.get("base", {}).get("ref", "unknown")
+              user = pr.get("user", {}).get("login", actor)
+
+              return "\n".join([
+                  f"**GitHub Pull Request `{action}`**",
+                  f"**Repo:** `{repo}`",
+                  f"**PR:** `#{number}` {title}",
+                  f"**By:** `{user}`",
+                  f"**Branch:** `{from_branch}` → `{to_branch}`",
+                  f"**Time:** `{now}`",
+                  url,
+                  f"Run: {run_url}",
+              ])
+
+          def build_issue_message():
+              issue = event.get("issue", {})
+              action = event.get("action", "unknown")
+              title = issue.get("title", "No title")
+              number = issue.get("number", "unknown")
+              url = issue.get("html_url", "")
+              user = issue.get("user", {}).get("login", actor)
+
+              return "\n".join([
+                  f"**GitHub Issue `{action}`**",
+                  f"**Repo:** `{repo}`",
+                  f"**Issue:** `#{number}` {title}",
+                  f"**By:** `{user}`",
+                  f"**Time:** `{now}`",
+                  url,
+                  f"Run: {run_url}",
+              ])
+
+          def build_issue_comment_message():
+              action = event.get("action", "unknown")
+              issue = event.get("issue", {})
+              comment = event.get("comment", {})
+              number = issue.get("number", "unknown")
+              title = issue.get("title", "No title")
+              url = comment.get("html_url", issue.get("html_url", ""))
+              user = comment.get("user", {}).get("login", actor)
+              body = comment.get("body", "").replace("\n", " ")
+              if len(body) > 300:
+                  body = body[:300] + "..."
+
+              return "\n".join([
+                  f"**GitHub Issue Comment `{action}`**",
+                  f"**Repo:** `{repo}`",
+                  f"**Issue/PR:** `#{number}` {title}",
+                  f"**By:** `{user}`",
+                  f"**Comment:** {body}",
+                  f"**Time:** `{now}`",
+                  url,
+                  f"Run: {run_url}",
+              ])
+
+          def build_create_delete_message():
+              action = "created" if event_name == "create" else "deleted"
+              ref_type = event.get("ref_type", "unknown")
+              event_ref = event.get("ref", ref_name)
+
+              return "\n".join([
+                  f"**GitHub Ref `{action}`**",
+                  f"**Repo:** `{repo}`",
+                  f"**Type:** `{ref_type}`",
+                  f"**Name:** `{event_ref}`",
+                  f"**By:** `{actor}`",
+                  f"**Time:** `{now}`",
+                  f"Run: {run_url}",
+              ])
+
+          def build_backfill_message():
+              output = subprocess.check_output(
+                  [
+                      "git",
+                      "log",
+                      f"-n{backfill_commits}",
+                      "--pretty=format:%H%x1f%an%x1f%ai%x1f%s"
+                  ],
+                  text=True,
+                  encoding="utf-8"
+              )
+
+              lines = [
+                  f"**Manual Backfill: Last {backfill_commits} commit(s)**",
+                  f"**Repo:** `{repo}`",
+                  f"**Branch:** `{ref_name}`",
+                  f"**Triggered by:** `{actor}`",
+                  f"**Time:** `{now}`",
+                  "",
+              ]
+
+              for line in output.splitlines():
+                  full_sha, author, commit_time, subject = line.split("\x1f", 3)
+                  commit_url = f"https://github.com/{repo}/commit/{full_sha}"
+                  lines.append(f"- `{short_sha(full_sha)}` **{subject}** by `{author}` at `{commit_time}`")
+                  lines.append(f"  {commit_url}")
+
+              lines.append(f"Run: {run_url}")
+              return "\n".join(lines)
+
+          if event_name == "workflow_dispatch" and backfill_commits > 0:
+              message = build_backfill_message()
+          elif event_name == "push":
+              message = build_push_message()
+          elif event_name == "pull_request":
+              message = build_pull_request_message()
+          elif event_name == "issues":
+              message = build_issue_message()
+          elif event_name == "issue_comment":
+              message = build_issue_comment_message()
+          elif event_name in ["create", "delete"]:
+              message = build_create_delete_message()
+          else:
+              message = "\n".join([
+                  f"**GitHub Event:** `{event_name}`",
+                  f"**Repo:** `{repo}`",
+                  f"**Branch/ref:** `{ref}`",
+                  f"**By:** `{actor}`",
+                  f"**Commit:** `{short_sha(sha)}`",
+                  f"**Time:** `{now}`",
+                  f"Run: {run_url}",
+              ])
+
+          if len(message) > 1900:
+              message = message[:1900] + "\n\nMessage trimmed because it was too long."
+
+          send_to_discord(message)
           PY
