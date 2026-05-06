@@ -42,10 +42,11 @@ def login(user: LogIn):
         if not check_username_char(email_or_username):
             return {"error": "invalid username or password"}
 
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
     try:
-        connection = get_connection()
-        if connection == None:
-            return {"error": "Database connection failed"}
         cursor = connection.cursor()
         email_exists = False
         username_exists = False
@@ -74,10 +75,11 @@ def login(user: LogIn):
 
     plain_password = user.password
 
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
     try:
-        connection = get_connection()
-        if connection == None:
-            return {"error": "Database connection failed"}
         cursor = connection.cursor()
         if is_email:
             if email_exists:

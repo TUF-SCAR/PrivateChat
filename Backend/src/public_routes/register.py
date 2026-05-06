@@ -42,10 +42,11 @@ def registration(user: Registration):
 
     hashed_password = hashPassword(password)
 
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
     try:
-        connection = get_connection()
-        if connection == None:
-            return {"error": "Database connection failed"}
         cursor = connection.cursor()
         cursor.execute(
             "SELECT EXISTS(SELECT 1 FROM users WHERE username = %s);", (username,)
@@ -55,10 +56,11 @@ def registration(user: Registration):
         cursor.close()
         connection.close()
 
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
     try:
-        connection = get_connection()
-        if connection == None:
-            return {"error": "Database connection failed"}
         cursor = connection.cursor()
         cursor.execute("SELECT EXISTS(SELECT 1 FROM users WHERE email = %s);", (email,))
         email_unique = cursor.fetchone()[0]
@@ -71,10 +73,11 @@ def registration(user: Registration):
     if email_unique:
         return {"error": "email already exists"}
 
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
     try:
-        connection = get_connection()
-        if connection == None:
-            return {"error": "Database connection failed"}
         cursor = connection.cursor()
         cursor.execute(
             "INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s);",
