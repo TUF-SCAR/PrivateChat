@@ -1,24 +1,15 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from jose import jwt
-from dotenv import load_dotenv
-from os import getenv
-from datetime import datetime, timedelta, timezone
+from src.auth import make_token
 from src.util import checkPassword
 from src.database import get_connection
 from src.security import check_email, check_username_char
-
-load_dotenv()
 
 
 class LogIn(BaseModel):
     email_or_username: str
     password: str
 
-
-SECRET_KEY = getenv("TOKEN_SECRET_KEY")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 router = APIRouter()
 
@@ -108,15 +99,7 @@ def login(user: LogIn):
         else:
             return {"error": "invalid username or password"}
 
-    expire_time = datetime.now(timezone.utc) + timedelta(
-        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    payload = {
-        "user_id": user_ID,
-        "exp": expire_time,
-    }
-
-    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    token = make_token(user_ID)
 
     return {
         "message": "login success",

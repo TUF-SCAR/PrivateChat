@@ -1,9 +1,21 @@
 from jose import jwt, JWTError, ExpiredSignatureError
+from datetime import datetime, timezone, timedelta
 from src.database import get_connection
 from dotenv import load_dotenv
 from os import getenv
 
 load_dotenv()
+
+
+def make_token(userid: int):
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+    expire_time = datetime.now(timezone.utc) + timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    payload = {"user_id": userid, "exp": expire_time}
+    SECRET_KEY = getenv("TOKEN_SECRET_KEY")
+    ALGORITHM = "HS256"
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def check_token(token: str):

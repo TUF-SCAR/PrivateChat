@@ -1,6 +1,6 @@
 import psycopg
-from dotenv import load_dotenv
 from os import getenv
+from dotenv import load_dotenv
 
 load_dotenv()
 DATABASE_NAME = getenv("DATABASE_NAME")

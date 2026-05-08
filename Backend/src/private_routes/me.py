@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Header
-from src.database import get_connection
 from src.auth import check_token
+from src.database import get_connection
 
 router = APIRouter()
 
@@ -25,7 +25,10 @@ def authentication(authorization: str = Header(None, alias="Authorization")):
     try:
         cursor = connection.cursor()
         cursor.execute("SELECT username FROM users WHERE id = %s;", (user_id,))
-        username = cursor.fetchone()[0]
+        row = cursor.fetchone()[0]
+        if row == None:
+            return {"error": "token invalid or expired"}
+        username = row[0]
     finally:
         cursor.close()
         connection.close()
