@@ -27,3 +27,4 @@ def get_connection():
         return None
     except Exception as error:
         print("Unexpected database error: ", error)
+        return None

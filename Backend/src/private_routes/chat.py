@@ -122,7 +122,7 @@ def all_chat(authorization: str = Header(None, alias="Authorization")):
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT chats.id, chats.is_group, chats.name, users.id, users.username FROM chats JOIN chat_members AS my_member ON chats.id = my_member.chat_id JOIN chat_members AS other_member ON chats.id = other_member.chat_id JOIN users ON other_member.user_id = users.id WHERE my_member.user_id = %s AND other_member.user_id != %s;",
+            "SELECT chats.id, chats.is_group, chats.name, users.id, users.username FROM chats JOIN chat_members AS my_member ON chats.id = my_member.chat_id JOIN chat_members AS other_member ON chats.id = other_member.chat_id JOIN users ON other_member.user_id = users.id WHERE my_member.user_id = %s AND other_member.user_id != %s AND is_group = FALSE;",
             (current_user_id, current_user_id),
         )
         rows = cursor.fetchall()

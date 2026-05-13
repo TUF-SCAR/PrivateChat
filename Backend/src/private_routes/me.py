@@ -25,7 +25,7 @@ def authentication(authorization: str = Header(None, alias="Authorization")):
     try:
         cursor = connection.cursor()
         cursor.execute("SELECT username FROM users WHERE id = %s;", (user_id,))
-        row = cursor.fetchone()[0]
+        row = cursor.fetchone()
         if row == None:
             return {"error": "token invalid or expired"}
         username = row[0]

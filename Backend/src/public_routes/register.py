@@ -48,22 +48,15 @@ def registration(user: Registration):
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             "SELECT EXISTS(SELECT 1 FROM users WHERE username = %s);", (username,)
         )
         username_unique = cursor.fetchone()[0]
-    finally:
-        cursor.close()
-        connection.close()
 
-    connection = get_connection()
-    if connection == None:
-        return {"error": "Database connection failed"}
-
-    try:
-        cursor = connection.cursor()
         cursor.execute("SELECT EXISTS(SELECT 1 FROM users WHERE email = %s);", (email,))
         email_unique = cursor.fetchone()[0]
+
     finally:
         cursor.close()
         connection.close()

@@ -141,11 +141,16 @@ def read_messages(
         connection.close()
 
     for row in rows:
+        if row[4]:
+            message_text = "this message was deleted"
+        else:
+            message_text = row[3]
+
         message = {
             "message_id": row[0],
             "sender_id": row[1],
             "sender_name": row[2],
-            "message_text": row[3],
+            "message_text": message_text,
             "is_deleted": row[4],
             "created_at": str(row[5]),
         }
