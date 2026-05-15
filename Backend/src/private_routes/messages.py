@@ -2,6 +2,11 @@ from fastapi import APIRouter, Header
 from pydantic import BaseModel
 from src.auth import check_token
 from src.database import get_connection
+from datetime import datetime, timedelta
+
+
+class EditMessage(BaseModel):
+    message_text: str
 
 
 class Messages(BaseModel):
@@ -71,6 +76,7 @@ def send_messages(
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             "INSERT INTO messages (chat_id, sender_id, message_text) VALUES (%s, %s, %s) RETURNING id;",
             (chat_id, current_user_id, message_text),
@@ -79,6 +85,11 @@ def send_messages(
         if row == None:
             return {"error": "Database error"}
         message_id = row[0]
+
+        cursor.execute(
+            "UPDATE chat_members SET is_deleted_for_me = FALSE, deleted_at = NULL WHERE chat_id = %s;",
+            (chat_id,),
+        )
         connection.commit()
     finally:
         cursor.close()
@@ -132,7 +143,7 @@ def read_messages(
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT messages.id, messages.sender_id, users.username, messages.message_text, messages.is_deleted, messages.created_at FROM messages JOIN users ON messages.sender_id = users.id WHERE messages.chat_id = %s ORDER BY messages.created_at ASC;",
+            "SELECT messages.id, messages.sender_id, users.username, messages.message_text, messages.is_deleted, messages.created_at, messages.is_edited, messages.edited_at FROM messages JOIN users ON messages.sender_id = users.id WHERE messages.chat_id = %s ORDER BY messages.created_at ASC;",
             (chat_id,),
         )
         rows = cursor.fetchall()
@@ -153,6 +164,8 @@ def read_messages(
             "message_text": message_text,
             "is_deleted": row[4],
             "created_at": str(row[5]),
+            "is_edited": row[6],
+            "edited_at": str(row[7]) if row[7] != None else None,
         }
         messages.append(message)
 
@@ -213,3 +226,66 @@ def soft_delete_message(
         connection.close()
 
     return {"message": "This message was deleted"}
+
+
+@router.patch("/messages/{message_id}")
+def edit_message(
+    message_id: int,
+    data: EditMessage,
+    authorization: str = Header(None, alias="Authorization"),
+):
+    new_message_text = data.message_text.strip()
+    token = authorization
+
+    if new_message_text == "":
+        return {"error": "invalid message"}
+
+    token_exists = check_token(token)
+    status = token_exists["status"]
+    if status == 2:
+        return {"error": "Database connection failed"}
+    if status == 1:
+        return {"error": "token invalid or expired"}
+    if status == 0:
+        current_user_id = token_exists["id"]
+
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "SELECT sender_id, is_deleted, created_at FROM messages WHERE id = %s;",
+            (message_id,),
+        )
+        row = cursor.fetchone()
+        if row == None:
+            return {"error": "message does not exist"}
+        sender_id = row[0]
+        is_deleted = row[1]
+
+        if sender_id != current_user_id:
+            return {"error": "access denied"}
+
+        if is_deleted:
+            return {"error": "cannot edit deleted messages"}
+
+        created_at = row[2]
+        current_time = datetime.now()
+        time_difference = current_time - created_at
+
+        if time_difference > timedelta(minutes=5):
+            return {"error": "message can no longer be edited"}
+
+        cursor.execute(
+            "UPDATE messages SET message_text = %s, is_edited = TRUE, edited_at = CURRENT_TIMESTAMP WHERE id = %s;",
+            (new_message_text, message_id),
+        )
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+    return {"message": "message edited"}

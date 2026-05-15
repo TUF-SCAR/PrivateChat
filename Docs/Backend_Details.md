@@ -162,6 +162,10 @@ Important common rule:
 >
 > If the private chat already exists, it returns the existing **chat_id**.
 >
+> Important: If the current user previously deleted this chat using **delete for me**, this route makes the chat visible again for that user by setting **is_deleted_for_me = False** and **deleted_at = NULL**.
+>
+> Read more: [Soft deletion](https://en.wikipedia.org/wiki/Deletion#Soft_deletion)
+>
 > ```json
 > {
 >   "other_user_id": 4
@@ -176,6 +180,15 @@ Important common rule:
 >   "chat_id": 1
 > }
 > ```
+>
+> If chat already exists:
+>
+> ```json
+> {
+>   "message": "chat already exists",
+>   "chat_id": 1
+> }
+> ```
 
 > ## `/chats` Get Request
 >
@@ -183,7 +196,9 @@ Important common rule:
 >
 > It takes the **authentication token** from the request header.
 >
-> Important: This route now returns only **private chats**, not group chats.
+> Important: This route returns only **private chats**, not group chats.
+>
+> Important: Chats deleted using **delete for me** are hidden because this route checks **is_deleted_for_me = False**.
 >
 > Group chats are fetched using `/groups`.
 >
@@ -207,6 +222,86 @@ Important common rule:
 > ]
 > ```
 
+> ## `/chats/{chat_id}` Get Request
+>
+> This is used to **fetch one chat's details** before opening the chat screen.
+>
+> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
+>
+> The backend checks:
+>
+> - **token is valid**
+> - **chat exists**
+> - **current user is a member of the chat**
+>
+> If the chat is a **private chat**, it returns the **other user's id and username**.
+>
+> If the chat is a **group chat**, it returns the **group name** and the current user's **role**.
+>
+> Example private chat response:
+>
+> ```json
+> {
+>   "message": "chat fetched",
+>   "chat": {
+>     "chat_id": 1,
+>     "is_group": false,
+>     "chat_name": null,
+>     "my_role": "member",
+>     "other_user_id": 2,
+>     "other_username": "zoro"
+>   }
+> }
+> ```
+>
+> Example group chat response:
+>
+> ```json
+> {
+>   "message": "chat fetched",
+>   "chat": {
+>     "chat_id": 5,
+>     "is_group": true,
+>     "chat_name": "PrivateChat Team",
+>     "my_role": "admin",
+>     "other_user_id": null,
+>     "other_username": null
+>   }
+> }
+> ```
+
+> ## `/chats/{chat_id}` Delete Request
+>
+> This is used to **delete a private chat only for the current user**.
+>
+> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
+>
+> Important: This is **not a full delete**. It is WhatsApp-style **delete for me**.
+>
+> The backend checks:
+>
+> - **token is valid**
+> - **chat exists**
+> - **chat is private**
+> - **current user is a member of the chat**
+>
+> Then it updates only the current user's row in **chat_members**:
+>
+> - **is_deleted_for_me = True**
+> - **deleted_at = CURRENT_TIMESTAMP**
+>
+> The other user can still see the chat.
+>
+> Read more: [Soft deletion](https://en.wikipedia.org/wiki/Deletion#Soft_deletion)
+>
+> Success response:
+>
+> ```json
+> {
+>   "message": "chat deleted"
+> }
+> ```
+
 ---
 
 ## Messages
@@ -225,6 +320,10 @@ Important common rule:
 > - **current user is a member of the chat**
 >
 > Then it stores the message and returns the **message_id**.
+>
+> Important: After sending a message, the backend makes the chat visible again for all members of that chat by setting **is_deleted_for_me = False** and **deleted_at = NULL**.
+>
+> This is needed because users can delete private chats only for themselves.
 >
 > ```json
 > {
@@ -254,6 +353,8 @@ Important common rule:
 >
 > Important: If a message is **soft deleted**, the original text is hidden and the API returns **"this message was deleted"** instead.
 >
+> Important: This route also returns **is_edited** and **edited_at** so the frontend can show edited messages.
+>
 > Read more: [Soft deletion](https://en.wikipedia.org/wiki/Deletion#Soft_deletion)
 >
 > ```py
@@ -265,7 +366,9 @@ Important common rule:
 >       "sender_name": "tappu",
 >       "message_text": "Hello, how are you??",
 >       "is_deleted": False,
->       "created_at": "2026-05-09 10:00:00"
+>       "created_at": "2026-05-09 10:00:00",
+>       "is_edited": False,
+>       "edited_at": None
 >   },
 >   {
 >       "message_id": 2,
@@ -273,7 +376,9 @@ Important common rule:
 >       "sender_name": "pappu",
 >       "message_text": "this message was deleted",
 >       "is_deleted": True,
->       "created_at": "2026-05-09 10:02:00"
+>       "created_at": "2026-05-09 10:02:00",
+>       "is_edited": False,
+>       "edited_at": None
 >   },
 > ]
 > ```
@@ -299,6 +404,45 @@ Important common rule:
 > ```json
 > {
 >   "message": "This message was deleted"
+> }
+> ```
+
+> ## `/messages/{message_id}` Patch Request
+>
+> This is used to **edit a message**.
+>
+> It takes **message_id** from the URL, **message_text** from the body, and the **authentication token** from the request header.
+>
+> The backend checks:
+>
+> - **new message text is not empty**
+> - **token is valid**
+> - **message exists**
+> - **current user is the sender of the message**
+> - **message is not deleted**
+> - **message is not older than 5 minutes**
+>
+> Important: A message can only be edited within **5 minutes** after it was sent.
+>
+> If editing is allowed, the backend updates:
+>
+> - **message_text**
+> - **is_edited = True**
+> - **edited_at = CURRENT_TIMESTAMP**
+>
+> Read more: [Timestamp](https://en.wikipedia.org/wiki/Timestamp)
+>
+> ```json
+> {
+>   "message_text": "Edited message text"
+> }
+> ```
+>
+> Success response:
+>
+> ```json
+> {
+>   "message": "message edited"
 > }
 > ```
 
@@ -587,6 +731,36 @@ Important common rule:
 
 ---
 
+## Database Columns Added After First Version
+
+> ## `messages` table
+>
+> These columns were added for message editing:
+>
+> - **is_edited BOOLEAN NOT NULL DEFAULT FALSE**
+> - **edited_at TIMESTAMP**
+>
+> Used by:
+>
+> - `/messages/{message_id}` Patch Request
+> - `/messages/{chat_id}` Get Request
+
+> ## `chat_members` table
+>
+> These columns were added for private chat **delete for me**:
+>
+> - **is_deleted_for_me BOOLEAN NOT NULL DEFAULT FALSE**
+> - **deleted_at TIMESTAMP**
+>
+> Used by:
+>
+> - `/chats/{chat_id}` Delete Request
+> - `/chats` Get Request
+> - `/chats` Post Request
+> - `/messages` Post Request
+
+---
+
 ## Helper Files
 
 > ## `auth.py`
@@ -631,9 +805,12 @@ Important common rule:
 > - **Login with email or username**
 > - **Token-based authentication**
 > - **Private chats**
+> - **Fetching one chat's details**
+> - **Delete private chat for me**
 > - **Sending messages**
 > - **Reading messages**
 > - **Soft deleting messages**
+> - **Editing messages within 5 minutes**
 > - **Searching users**
 > - **Creating groups**
 > - **Adding/removing group members**
@@ -646,7 +823,6 @@ Important common rule:
 >
 > Features planned for later:
 >
-> - **Edit message within 5 minutes**
 > - **Temporary hard delete after soft delete**
 > - **Voice messages**
 > - **File sharing**
