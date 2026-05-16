@@ -1,0 +1,158 @@
+<!-- register.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register Page</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            position: relative;
+            width: 500px;
+            height: 450px;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: "";
+            position: absolute;
+            width: 700px;
+            height: 700px;
+            background: linear-gradient(blue, green, blue);
+            animation: rotate 4s linear infinite;
+            top: -35%;
+            left: -20%;
+        }
+
+        .container::after {
+            content: "";
+            position: absolute;
+            inset: 4px;
+            background: white;
+            border-radius: 12px;
+        }
+
+        .form-box {
+            position: relative;
+            z-index: 1;
+            padding: 25px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        input {
+            width: 80%;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 35px;
+            border: 1px solid gray;
+        }
+
+        button {
+            width: 50%;
+            margin-left: 110px;
+            padding: 15px;
+            background: linear-gradient(to right, blue, green);
+            color: white;
+            border-radius: 20px;
+            margin-top: 20px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .link a {
+            color: blue;
+            text-decoration: none;
+        }
+
+        .link a:hover {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .error {
+            color: red;
+            font-size: 14px;
+            text-align: center;
+            margin: 5px 0;
+        }
+
+        @keyframes rotate {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="form-box">
+
+        <h1>Register</h1>
+
+        <input type="text" id="regUser" placeholder="Enter Username">
+
+        <input type="email" id="regEmail" placeholder="Enter Email">
+
+        <input type="password" id="regPass" placeholder="Enter Password">
+
+        <p id="registerError" class="error"></p>
+
+        <button onclick="register()">Register</button>
+
+        <div class="link">
+            <a href="login.html">Already have an account? Login</a>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    function register() {
+
+        let user = document.getElementById("regUser").value;
+        let pass = document.getElementById("regPass").value;
+        let email = document.getElementById("regEmail").value;
+        let error = document.getElementById("registerError");
+
+        if(user === "" || pass === "" || email === "") {
+            error.innerText = "⚠ Please fill all fields";
+            return;
+        }
+
+        error.innerText = "";
+
+        localStorage.setItem("username", user);
+        localStorage.setItem("password", pass);
+        localStorage.setItem("email", email);
+
+        alert("Registration successful!");
+
+        window.location.href = "login.html";
+    }
+</script>
+
+</body>
+</html>
