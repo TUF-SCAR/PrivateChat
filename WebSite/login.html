@@ -133,21 +133,15 @@
         let pass = document.getElementById("loginPass").value;
         let error = document.getElementById("loginError");
 
-        let storedUser = localStorage.getItem("username");
-        let storedEmail = localStorage.getItem("email");
-        let storedPass = localStorage.getItem("password");
-
         if(user === "" || pass === "") {
             error.innerText = "⚠ Please fill all fields";
             return;
         }
-
-        if((user === storedUser || user === storedEmail) && pass === storedPass) {
-            error.innerText = "";
+     
+        else{
             alert("Login successful!");
-        } else {
-            error.innerText = "❌ Invalid username or password";
         }
+            
     }
 </script>
 
