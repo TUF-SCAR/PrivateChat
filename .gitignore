@@ -1,0 +1,90 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Flutter/Dart/Pub
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+build/
+
+# Flutter generated files
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Android/Gradle
+/android/.gradle/
+/android/captures/
+/android/local.properties
+/android/**/GeneratedPluginRegistrant.*
+
+# IntelliJ / Android Studio
+*.iml
+.idea/
+.gradle/
+
+# VS Code
+.vscode/
+
+# Keystore files (IMPORTANT)
+*.jks
+*.keystore
+key.properties
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+
+# Generated files
+coverage/
+lib/generated/
+.generated/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# Obfuscation / Symbols
+app.*.symbols
+
+# Temporary
+tmp/
+temp/
+
+# macOS
+macos/Flutter/ephemeral/
+
+# Linux
+linux/flutter/ephemeral/
+
+# Windows
+windows/flutter/ephemeral/
+
+# Web
+web/flutter_service_worker.js
+web/.dart_tool/
+
+# iOS
+ios/Flutter/.last_build_id
+ios/Flutter/Flutter.framework
+ios/Flutter/App.framework
+ios/Flutter/ephemeral/
+
+# FVM
+.fvm/
+
+# Environment files
+.env
+.env.*
