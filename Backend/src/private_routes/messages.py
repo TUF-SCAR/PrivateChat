@@ -273,7 +273,7 @@ def edit_message(
             return {"error": "cannot edit deleted messages"}
 
         created_at = row[2]
-        current_time = datetime.now()
+        current_time = datetime.utcnow()
         time_difference = current_time - created_at
 
         if time_difference > timedelta(minutes=5):

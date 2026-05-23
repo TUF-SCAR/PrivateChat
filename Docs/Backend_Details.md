@@ -14,6 +14,21 @@ Important common rule:
 >
 > Read more: [Authorization header](https://en.wikipedia.org/wiki/HTTP_header), [JSON Web Token](https://en.wikipedia.org/wiki/JSON_Web_Token)
 
+## HTTP Status Codes
+
+PrivateChat currently returns JSON error messages directly.
+
+Future versions may also use proper HTTP status codes like:
+
+- **200 OK**
+- **201 Created**
+- **400 Bad Request**
+- **401 Unauthorized**
+- **403 Forbidden**
+- **404 Not Found**
+
+Read more: [HTTP status code](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes)
+
 ---
 
 ## Register
@@ -149,7 +164,7 @@ Important common rule:
 
 > ## `/chats` Post Request
 >
-> This is used to **make a private chat**.
+> This is used to **create a private chat**.
 >
 > It takes **other_user_id** as an argument and also takes the **authentication token** from the request header.
 >
@@ -423,6 +438,8 @@ Important common rule:
 > - **message is not older than 5 minutes**
 >
 > Important: A message can only be edited within **5 minutes** after it was sent.
+>
+> Important: The 5-minute edit limit is checked using **UTC timestamps**.
 >
 > If editing is allowed, the backend updates:
 >
@@ -823,9 +840,11 @@ Important common rule:
 >
 > Features planned for later:
 >
+> - **Real-time messaging (WebSockets)** — next major backend feature
+> - **Typing indicators**
+> - **Read receipts**
 > - **Temporary hard delete after soft delete**
 > - **Voice messages**
 > - **File sharing**
-> - **End-to-end encryption**
 >
-> Read more: [End-to-end encryption](https://en.wikipedia.org/wiki/End-to-end_encryption), [File sharing](https://en.wikipedia.org/wiki/File_sharing)
+> Read more: [WebSocket](https://en.wikipedia.org/wiki/WebSocket), [File sharing](https://en.wikipedia.org/wiki/File_sharing)
