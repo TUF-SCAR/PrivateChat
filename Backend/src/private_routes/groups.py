@@ -483,8 +483,8 @@ def all_groups(authorization: str = Header(None, alias="Authorization")):
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT chats.id, chats.name, chat_members.role, chats.created_at FROM chats JOIN chat_members ON chats.id = chat_members.chat_id WHERE chats.is_group = TRUE AND chat_members.user_id = %s ORDER BY chats.created_at DESC;",
-            (current_user_id,),
+            "SELECT chats.id, chats.name, chat_members.role, chats.created_at, (SELECT CASE WHEN messages.is_deleted = TRUE THEN 'this message was deleted' ELSE messages.message_text END FROM messages WHERE messages.chat_id = chats.id ORDER BY messages.created_at DESC LIMIT 1) AS last_message, (SELECT messages.created_at FROM messages WHERE messages.chat_id = chats.id ORDER BY messages.created_at DESC LIMIT 1) AS last_message_time, (SELECT COUNT(*) FROM messages WHERE messages.chat_id = chats.id AND messages.sender_id != %s AND messages.is_deleted = FALSE AND NOT EXISTS (SELECT 1 FROM message_reads WHERE message_reads.message_id = messages.id AND message_reads.user_id = %s)) AS unread_count FROM chats JOIN chat_members ON chats.id = chat_members.chat_id WHERE chats.is_group = TRUE AND chat_members.user_id = %s ORDER BY last_message_time DESC NULLS LAST;",
+            (current_user_id, current_user_id, current_user_id),
         )
         rows = cursor.fetchall()
     finally:
@@ -497,6 +497,9 @@ def all_groups(authorization: str = Header(None, alias="Authorization")):
             "group_name": row[1],
             "my_role": row[2],
             "created_at": str(row[3]),
+            "last_message": row[4],
+            "last_message_time": str(row[5]) if row[5] != None else None,
+            "unread_count": row[6],
         }
         groups.append(group)
 

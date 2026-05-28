@@ -130,8 +130,8 @@ def all_chat(authorization: str = Header(None, alias="Authorization")):
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT chats.id, chats.is_group, chats.name, users.id, users.username FROM chats JOIN chat_members AS my_member ON chats.id = my_member.chat_id JOIN chat_members AS other_member ON chats.id = other_member.chat_id JOIN users ON other_member.user_id = users.id WHERE my_member.user_id = %s AND other_member.user_id != %s AND is_group = FALSE AND my_member.is_deleted_for_me = FALSE;",
-            (current_user_id, current_user_id),
+            "SELECT chats.id, chats.is_group, chats.name, users.id, users.username, (SELECT CASE WHEN messages.is_deleted = TRUE THEN 'this message was deleted' ELSE messages.message_text END FROM messages WHERE messages.chat_id = chats.id ORDER BY messages.created_at DESC LIMIT 1) AS last_message, (SELECT messages.created_at FROM messages WHERE messages.chat_id = chats.id ORDER BY messages.created_at DESC LIMIT 1) AS last_message_time, (SELECT COUNT(*) FROM messages WHERE messages.chat_id = chats.id AND messages.sender_id != %s AND messages.is_deleted = FALSE AND NOT EXISTS (SELECT 1 FROM message_reads WHERE message_reads.message_id = messages.id AND message_reads.user_id = %s)) AS unread_count FROM chats JOIN chat_members AS my_member ON chats.id = my_member.chat_id JOIN chat_members AS other_member ON chats.id = other_member.chat_id JOIN users ON other_member.user_id = users.id WHERE my_member.user_id = %s AND other_member.user_id != %s AND chats.is_group = FALSE AND my_member.is_deleted_for_me = FALSE ORDER BY last_message_time DESC NULLS LAST;",
+            (current_user_id, current_user_id, current_user_id, current_user_id),
         )
         rows = cursor.fetchall()
     finally:
@@ -145,6 +145,9 @@ def all_chat(authorization: str = Header(None, alias="Authorization")):
             "chat_name": row[2],
             "other_user_id": row[3],
             "other_username": row[4],
+            "last_message": row[5],
+            "last_message_time": str(row[6]) if row[6] != None else None,
+            "unread_count": row[7],
         }
         chats.append(chat)
 

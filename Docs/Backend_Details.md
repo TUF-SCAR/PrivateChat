@@ -1,850 +1,742 @@
-# PrivateChat Backend
+# PrivateChat Backend Details
 
-This file explains the backend routes used in **PrivateChat**.
+PrivateChat backend is a FastAPI + PostgreSQL chat backend. It supports account auth, private chats, group chats, messaging, message editing/deleting, pagination, read receipts, replies, WebSocket realtime events, and device-token registration for push notifications.
 
-Important common rule:
+## Common rule for private routes
 
-> Private routes need an **authentication token** in the request header.
->
-> Header used:
->
-> ```txt
-> Authorization: Bearer YOUR_TOKEN_HERE
-> ```
->
-> Read more: [Authorization header](https://en.wikipedia.org/wiki/HTTP_header), [JSON Web Token](https://en.wikipedia.org/wiki/JSON_Web_Token)
+Private routes require this header:
 
-## HTTP Status Codes
+```txt
+Authorization: Bearer YOUR_TOKEN_HERE
+```
 
-PrivateChat currently returns JSON error messages directly.
+The token is created during login and checked by `check_token()`.
 
-Future versions may also use proper HTTP status codes like:
+## Main database tables
 
-- **200 OK**
-- **201 Created**
-- **400 Bad Request**
-- **401 Unauthorized**
-- **403 Forbidden**
-- **404 Not Found**
+| Table           | Purpose                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| `users`         | Stores username, email, hashed password, and creation time.                                           |
+| `chats`         | Stores private chats and group chats. `is_group = false` means private chat, `true` means group chat. |
+| `chat_members`  | Stores which users are inside each chat, group roles, and delete-for-me state.                        |
+| `messages`      | Stores messages, soft-delete state, edit state, and optional reply target.                            |
+| `message_reads` | Stores read receipts. One row means one user read one message.                                        |
+| `user_devices`  | Stores Firebase/device tokens for future push notifications.                                          |
 
-Read more: [HTTP status code](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes)
+## Public routes
 
----
+### `POST /register`
 
-## Register
+Registers a new user.
 
-> ## `/register` Post Request
->
-> This is used to **register a new account**.
->
-> It takes **username, email, password** as arguments.
->
-> The backend checks:
->
-> - **username is valid**
-> - **email is valid**
-> - **password is valid**
-> - **username is not already used**
-> - **email is not already used**
->
-> Then it takes the password, [hashes](https://en.wikipedia.org/wiki/Cryptographic_hash_function) it, and stores **username, email, password_hash** in the database.
->
-> Important: The backend stores **hashed password**, not the real password.
->
-> ```json
-> {
->   "username": "scar",
->   "email": "scar@example.com",
->   "password": "password123"
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "registration success"
-> }
-> ```
+Request body:
 
----
+```json
+{
+  "username": "scar",
+  "email": "scar@example.com",
+  "password": "password123"
+}
+```
 
-## Login
+Checks username, email, password, username uniqueness, and email uniqueness. Password is stored as `password_hash`, not plain text.
 
-> ## `/login` Post Request
->
-> This is used to **login to an existing account** and get an **authentication token**.
->
-> It takes **email_or_username** and **password** as arguments.
->
-> The backend checks if the user is logging in using **email** or **username**.
->
-> Then it compares the entered password with the stored **password_hash** using password verification.
->
-> Read more: [Password hashing](https://en.wikipedia.org/wiki/Password_hashing), [JSON Web Token](https://en.wikipedia.org/wiki/JSON_Web_Token)
->
-> ```json
-> {
->   "email_or_username": "scar",
->   "password": "password123"
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "login success",
->   "access_token": "token_here",
->   "token_type": "bearer"
-> }
-> ```
->
-> Important: This token is used in **private_routes** for authentication.
+Success:
 
----
+```json
+{
+  "message": "registration success"
+}
+```
 
-## Me
+### `POST /login`
 
-> ## `/me` Get Request
->
-> This is used to **check if the token is valid** and return the logged-in user's details.
->
-> It takes the **authentication token** from the request header.
->
-> Then it checks the token and returns the user's **id** and **username**.
->
-> Success response:
->
-> ```json
-> {
->   "message": "token valid",
->   "id": 1,
->   "username": "scar"
-> }
-> ```
+Logs in with email or username and returns a token.
 
----
+Request body:
 
-## Users
+```json
+{
+  "email_or_username": "scar",
+  "password": "password123"
+}
+```
 
-> ## `/users/search` Get Request
->
-> This is used to **search users by username**.
->
-> It takes **username** as a query parameter and also takes the **authentication token** from the request header.
->
-> It returns up to **10 users** matching the search text.
->
-> Important: It does **not return the current logged-in user** in the search result.
->
-> Example request:
->
-> ```txt
-> /users/search?username=pa
-> ```
->
-> Example response:
->
-> ```json
-> {
->   "message": "users fetched",
->   "users": [
->     {
->       "id": 2,
->       "username": "pappu"
->     }
->   ]
-> }
-> ```
+Success:
 
----
+```json
+{
+  "message": "login success",
+  "access_token": "token_here",
+  "token_type": "bearer"
+}
+```
 
-## Chat
+## User routes
 
-> ## `/chats` Post Request
->
-> This is used to **create a private chat**.
->
-> It takes **other_user_id** as an argument and also takes the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **token is valid**
-> - **other user exists**
-> - **current user is not trying to chat with themselves**
-> - **same private chat does not already exist**
->
-> If the private chat already exists, it returns the existing **chat_id**.
->
-> Important: If the current user previously deleted this chat using **delete for me**, this route makes the chat visible again for that user by setting **is_deleted_for_me = False** and **deleted_at = NULL**.
->
-> Read more: [Soft deletion](https://en.wikipedia.org/wiki/Deletion#Soft_deletion)
->
-> ```json
-> {
->   "other_user_id": 4
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "successfully created chat",
->   "chat_id": 1
-> }
-> ```
->
-> If chat already exists:
->
-> ```json
-> {
->   "message": "chat already exists",
->   "chat_id": 1
-> }
-> ```
+### `GET /me`
 
-> ## `/chats` Get Request
->
-> This is used to get all **private chats** that exist for the logged-in user.
->
-> It takes the **authentication token** from the request header.
->
-> Important: This route returns only **private chats**, not group chats.
->
-> Important: Chats deleted using **delete for me** are hidden because this route checks **is_deleted_for_me = False**.
->
-> Group chats are fetched using `/groups`.
->
-> ```py
-> # Example of what this request returns
-> chats = [
->   {
->       "chat_id": 1,
->       "is_group": False,
->       "chat_name": None,
->       "other_user_id": 4,
->       "other_username": "tappu",
->   },
->   {
->       "chat_id": 3,
->       "is_group": False,
->       "chat_name": None,
->       "other_user_id": 2,
->       "other_username": "pappu",
->   },
-> ]
-> ```
+Checks if the token is valid and returns the logged-in user.
 
-> ## `/chats/{chat_id}` Get Request
->
-> This is used to **fetch one chat's details** before opening the chat screen.
->
-> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **token is valid**
-> - **chat exists**
-> - **current user is a member of the chat**
->
-> If the chat is a **private chat**, it returns the **other user's id and username**.
->
-> If the chat is a **group chat**, it returns the **group name** and the current user's **role**.
->
-> Example private chat response:
->
-> ```json
-> {
->   "message": "chat fetched",
->   "chat": {
->     "chat_id": 1,
->     "is_group": false,
->     "chat_name": null,
->     "my_role": "member",
->     "other_user_id": 2,
->     "other_username": "zoro"
->   }
-> }
-> ```
->
-> Example group chat response:
->
-> ```json
-> {
->   "message": "chat fetched",
->   "chat": {
->     "chat_id": 5,
->     "is_group": true,
->     "chat_name": "PrivateChat Team",
->     "my_role": "admin",
->     "other_user_id": null,
->     "other_username": null
->   }
-> }
-> ```
+Success:
 
-> ## `/chats/{chat_id}` Delete Request
->
-> This is used to **delete a private chat only for the current user**.
->
-> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
->
-> Important: This is **not a full delete**. It is WhatsApp-style **delete for me**.
->
-> The backend checks:
->
-> - **token is valid**
-> - **chat exists**
-> - **chat is private**
-> - **current user is a member of the chat**
->
-> Then it updates only the current user's row in **chat_members**:
->
-> - **is_deleted_for_me = True**
-> - **deleted_at = CURRENT_TIMESTAMP**
->
-> The other user can still see the chat.
->
-> Read more: [Soft deletion](https://en.wikipedia.org/wiki/Deletion#Soft_deletion)
->
-> Success response:
->
-> ```json
-> {
->   "message": "chat deleted"
-> }
-> ```
+```json
+{
+  "message": "token valid",
+  "id": 1,
+  "username": "scar"
+}
+```
 
----
+### `GET /users/search?username=text`
 
-## Messages
+Searches users by username. It returns up to 10 matching users and does not include the current logged-in user.
 
-> ## `/messages` Post Request
->
-> This is used to **send a message** to a chat.
->
-> It takes **chat_id** and **message_text** as arguments and also takes the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **message is not empty**
-> - **token is valid**
-> - **chat exists**
-> - **current user is a member of the chat**
->
-> Then it stores the message and returns the **message_id**.
->
-> Important: After sending a message, the backend makes the chat visible again for all members of that chat by setting **is_deleted_for_me = False** and **deleted_at = NULL**.
->
-> This is needed because users can delete private chats only for themselves.
->
-> ```json
-> {
->   "chat_id": 1,
->   "message_text": "Hello bro"
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "message sent",
->   "message_id": 10
-> }
-> ```
+Success:
 
-> ## `/messages/{chat_id}` Get Request
->
-> This is used to **read messages in a chat**.
->
-> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
->
-> The backend checks if the current user is a member of the chat.
->
-> Then it returns all messages in that chat.
->
-> Important: If a message is **soft deleted**, the original text is hidden and the API returns **"this message was deleted"** instead.
->
-> Important: This route also returns **is_edited** and **edited_at** so the frontend can show edited messages.
->
-> Read more: [Soft deletion](https://en.wikipedia.org/wiki/Deletion#Soft_deletion)
->
-> ```py
-> # Example of what this request returns
-> messages = [
->   {
->       "message_id": 1,
->       "sender_id": 1,
->       "sender_name": "tappu",
->       "message_text": "Hello, how are you??",
->       "is_deleted": False,
->       "created_at": "2026-05-09 10:00:00",
->       "is_edited": False,
->       "edited_at": None
->   },
->   {
->       "message_id": 2,
->       "sender_id": 2,
->       "sender_name": "pappu",
->       "message_text": "this message was deleted",
->       "is_deleted": True,
->       "created_at": "2026-05-09 10:02:00",
->       "is_edited": False,
->       "edited_at": None
->   },
-> ]
-> ```
+```json
+{
+  "message": "users fetched",
+  "users": [
+    {
+      "id": 2,
+      "username": "zoro"
+    }
+  ]
+}
+```
 
-> ## `/messages/{message_id}` Delete Request
->
-> This is used to **soft delete a message**.
->
-> It takes **message_id** from the URL and takes the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **token is valid**
-> - **message exists**
-> - **current user is the sender of the message**
->
-> Then it changes **is_deleted** to **True**.
->
-> Important: The message row is still stored in the database, but the message text is hidden when reading messages.
->
-> Success response:
->
-> ```json
-> {
->   "message": "This message was deleted"
-> }
-> ```
+## Private chat routes
 
-> ## `/messages/{message_id}` Patch Request
->
-> This is used to **edit a message**.
->
-> It takes **message_id** from the URL, **message_text** from the body, and the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **new message text is not empty**
-> - **token is valid**
-> - **message exists**
-> - **current user is the sender of the message**
-> - **message is not deleted**
-> - **message is not older than 5 minutes**
->
-> Important: A message can only be edited within **5 minutes** after it was sent.
->
-> Important: The 5-minute edit limit is checked using **UTC timestamps**.
->
-> If editing is allowed, the backend updates:
->
-> - **message_text**
-> - **is_edited = True**
-> - **edited_at = CURRENT_TIMESTAMP**
->
-> Read more: [Timestamp](https://en.wikipedia.org/wiki/Timestamp)
->
-> ```json
-> {
->   "message_text": "Edited message text"
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "message edited"
-> }
-> ```
+### `POST /chats`
 
----
+Creates a private chat with another user, or returns the existing chat if it already exists.
 
-## Groups
+Request body:
 
-> ## `/groups` Post Request
->
-> This is used to **create a group chat**.
->
-> It takes **name** and **member_ids** as arguments and also takes the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **group name is valid**
-> - **group name is not more than 100 characters**
-> - **at least one other member is added**
-> - **all member ids exist**
->
-> Then it creates a group in **chats** with **is_group = True**.
->
-> The current user is added as **admin**.
->
-> Other users are added as **member**.
->
-> Read more: [Role-based access control](https://en.wikipedia.org/wiki/Role-based_access_control)
->
-> ```json
-> {
->   "name": "PrivateChat Team",
->   "member_ids": [2, 3, 4]
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "successfully created group",
->   "chat_id": 5
-> }
-> ```
+```json
+{
+  "other_user_id": 2
+}
+```
 
-> ## `/groups` Get Request
->
-> This is used to **fetch all groups** where the current user is a member.
->
-> It takes the **authentication token** from the request header.
->
-> It returns the group id, group name, current user's role, and created time.
->
-> Example response:
->
-> ```json
-> {
->   "message": "groups fetched",
->   "groups": [
->     {
->       "chat_id": 5,
->       "group_name": "PrivateChat Team",
->       "my_role": "admin",
->       "created_at": "2026-05-14 10:30:00"
->     }
->   ]
-> }
-> ```
+If the current user had deleted the private chat for themselves, this route makes it visible again for them.
 
-> ## `/groups/{chat_id}/members` Post Request
->
-> This is used to **add a member to a group**.
->
-> It takes **chat_id** from the URL, **user_id** from the body, and the **authentication token** from the request header.
->
-> Only **admin** can add members.
->
-> The backend checks:
->
-> - **group exists**
-> - **current user is admin**
-> - **target user exists**
-> - **target user is not already a member**
->
-> ```json
-> {
->   "user_id": 6
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "member added"
-> }
-> ```
+Success:
 
-> ## `/groups/{chat_id}/members/{user_id}` Delete Request
->
-> This is used to **remove a member from a group**.
->
-> It takes **chat_id** and **user_id** from the URL and takes the **authentication token** from the request header.
->
-> Only **admin** can remove members.
->
-> The backend checks:
->
-> - **group exists**
-> - **current user is admin**
-> - **target user is a member**
-> - **admin is not removing themselves**
-> - **target user is not the last admin**
->
-> Important: Admin cannot use this route to remove themselves. For that, use `/groups/{chat_id}/leave`.
->
-> Success response:
->
-> ```json
-> {
->   "message": "member removed"
-> }
-> ```
+```json
+{
+  "message": "successfully created chat",
+  "chat_id": 1
+}
+```
 
-> ## `/groups/{chat_id}/leave` Delete Request
->
-> This is used when the **current logged-in user leaves a group**.
->
-> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
->
-> The backend checks:
->
-> - **group exists**
-> - **current user is a member**
-> - **if current user is the only admin**
-> - **how many members are in the group**
->
-> Rules:
->
-> - If the user is the **last member**, the whole group is deleted.
-> - If the user is the **only admin**, they cannot leave until another admin exists.
-> - Otherwise, the user is removed from **chat_members**.
->
-> Success response:
->
-> ```json
-> {
->   "message": "successfully left group"
-> }
-> ```
->
-> If last member leaves:
->
-> ```json
-> {
->   "message": "group deleted because you were the last member"
-> }
-> ```
+If already exists:
 
-> ## `/groups/{chat_id}/members/{user_id}/role` Patch Request
->
-> This is used to **change a group member's role**.
->
-> It takes **chat_id** and **user_id** from the URL, **role** from the body, and the **authentication token** from the request header.
->
-> Only **admin** can change roles.
->
-> Allowed roles:
->
-> - **admin**
-> - **member**
->
-> The backend checks:
->
-> - **role is valid**
-> - **group exists**
-> - **current user is admin**
-> - **target user is a member**
-> - **last admin is not being changed to member**
->
-> Read more: [Role-based access control](https://en.wikipedia.org/wiki/Role-based_access_control)
->
-> ```json
-> {
->   "role": "admin"
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "role updated"
-> }
-> ```
->
-> If the role is already set:
->
-> ```json
-> {
->   "message": "role already set"
-> }
-> ```
+```json
+{
+  "message": "chat already exists",
+  "chat_id": 1
+}
+```
 
-> ## `/groups/{chat_id}/members` Get Request
->
-> This is used to **fetch all members of a group**.
->
-> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
->
-> Any group member can view the group member list.
->
-> The backend checks:
->
-> - **group exists**
-> - **current user is a member**
->
-> Example response:
->
-> ```json
-> {
->   "message": "members fetched",
->   "members": [
->     {
->       "user_id": 1,
->       "username": "scar",
->       "role": "admin",
->       "joined_at": "2026-05-14 10:30:00"
->     }
->   ]
-> }
-> ```
+### `GET /chats`
 
-> ## `/groups/{chat_id}` Patch Request
->
-> This is used to **rename a group**.
->
-> It takes **chat_id** from the URL, **name** from the body, and the **authentication token** from the request header.
->
-> Only **admin** can rename a group.
->
-> The backend checks:
->
-> - **new group name is valid**
-> - **new group name is not more than 100 characters**
-> - **group exists**
-> - **current user is admin**
->
-> ```json
-> {
->   "name": "New Group Name"
-> }
-> ```
->
-> Success response:
->
-> ```json
-> {
->   "message": "group renamed"
-> }
-> ```
+Returns all private chats for the current user. Deleted-for-me chats are hidden. The response includes last message preview and unread count.
 
-> ## `/groups/{chat_id}` Delete Request
->
-> This is used to **delete a whole group**.
->
-> It takes **chat_id** from the URL and takes the **authentication token** from the request header.
->
-> Only **admin** can delete a group.
->
-> The backend checks:
->
-> - **group exists**
-> - **current user is admin**
->
-> Important: Deleting a group deletes the group from **chats**. Because the database uses **ON DELETE CASCADE**, related **chat_members** and **messages** are also deleted automatically.
->
-> Read more: [Foreign key](https://en.wikipedia.org/wiki/Foreign_key), [Referential integrity](https://en.wikipedia.org/wiki/Referential_integrity)
->
-> Success response:
->
-> ```json
-> {
->   "message": "group deleted"
-> }
-> ```
+Success:
 
----
+```json
+{
+  "message": "chats fetched",
+  "chats": [
+    {
+      "chat_id": 1,
+      "is_group": false,
+      "chat_name": null,
+      "other_user_id": 2,
+      "other_username": "zoro",
+      "last_message": "hello bro",
+      "last_message_time": "2026-05-28 10:30:00",
+      "unread_count": 3
+    }
+  ]
+}
+```
 
-## Database Columns Added After First Version
+### `GET /chats/{chat_id}`
 
-> ## `messages` table
->
-> These columns were added for message editing:
->
-> - **is_edited BOOLEAN NOT NULL DEFAULT FALSE**
-> - **edited_at TIMESTAMP**
->
-> Used by:
->
-> - `/messages/{message_id}` Patch Request
-> - `/messages/{chat_id}` Get Request
+Fetches one chat's details. Works for both private chats and group chats.
 
-> ## `chat_members` table
->
-> These columns were added for private chat **delete for me**:
->
-> - **is_deleted_for_me BOOLEAN NOT NULL DEFAULT FALSE**
-> - **deleted_at TIMESTAMP**
->
-> Used by:
->
-> - `/chats/{chat_id}` Delete Request
-> - `/chats` Get Request
-> - `/chats` Post Request
-> - `/messages` Post Request
+Private chat success:
 
----
+```json
+{
+  "message": "chat fetched",
+  "chat": {
+    "chat_id": 1,
+    "is_group": false,
+    "chat_name": null,
+    "my_role": "member",
+    "other_user_id": 2,
+    "other_username": "zoro"
+  }
+}
+```
 
-## Helper Files
+Group chat success:
 
-> ## `auth.py`
->
-> This file handles **token creation** and **token checking**.
->
-> `make_token()` creates a [JWT](https://en.wikipedia.org/wiki/JSON_Web_Token).
->
-> `check_token()` checks if the token is valid, expired, or invalid.
->
-> It also checks if the user still exists in the database.
+```json
+{
+  "message": "chat fetched",
+  "chat": {
+    "chat_id": 5,
+    "is_group": true,
+    "chat_name": "PrivateChat Team",
+    "my_role": "admin",
+    "other_user_id": null,
+    "other_username": null
+  }
+}
+```
 
-> ## `database.py`
->
-> This file handles the PostgreSQL database connection.
->
-> It uses values from the `.env` file like **DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, DATABASE_PORT**.
->
-> Read more: [PostgreSQL](https://en.wikipedia.org/wiki/PostgreSQL), [Environment variable](https://en.wikipedia.org/wiki/Environment_variable)
+### `DELETE /chats/{chat_id}`
 
-> ## `security.py`
->
-> This file contains helper functions for checking **username** and **email** format.
+Deletes a private chat only for the current user. This is delete-for-me, not full deletion.
 
-> ## `util.py`
->
-> This file contains password helper functions.
->
-> `hashPassword()` hashes the password.
->
-> `checkPassword()` checks a plain password against the stored password hash.
->
-> Read more: [bcrypt](https://en.wikipedia.org/wiki/Bcrypt)
+Success:
 
----
+```json
+{
+  "message": "chat deleted"
+}
+```
 
-## Current Important Notes
+## Message routes
 
-> PrivateChat currently supports:
->
-> - **User registration**
-> - **Login with email or username**
-> - **Token-based authentication**
-> - **Private chats**
-> - **Fetching one chat's details**
-> - **Delete private chat for me**
-> - **Sending messages**
-> - **Reading messages**
-> - **Soft deleting messages**
-> - **Editing messages within 5 minutes**
-> - **Searching users**
-> - **Creating groups**
-> - **Adding/removing group members**
-> - **Leaving groups**
-> - **Changing member roles**
-> - **Fetching group members**
-> - **Fetching all groups**
-> - **Renaming groups**
-> - **Deleting groups**
->
-> Features planned for later:
->
-> - **Real-time messaging (WebSockets)** — next major backend feature
-> - **Typing indicators**
-> - **Read receipts**
-> - **Temporary hard delete after soft delete**
-> - **Voice messages**
-> - **File sharing**
->
-> Read more: [WebSocket](https://en.wikipedia.org/wiki/WebSocket), [File sharing](https://en.wikipedia.org/wiki/File_sharing)
+### `POST /messages`
+
+Sends a message. Supports normal messages and reply messages.
+
+Normal message body:
+
+```json
+{
+  "chat_id": 1,
+  "message_text": "hello bro"
+}
+```
+
+Reply message body:
+
+```json
+{
+  "chat_id": 1,
+  "message_text": "yes bro",
+  "reply_to_message_id": 10
+}
+```
+
+Checks token, chat existence, membership, message text, and if replying, checks that the replied message exists in the same chat.
+
+Success:
+
+```json
+{
+  "message": "message sent",
+  "message_id": 20
+}
+```
+
+### `GET /messages/{chat_id}?limit=50&offset=0`
+
+Fetches messages from a chat with pagination. It returns newest messages first because of descending order. Frontend can use `offset` to load older messages when scrolling up.
+
+Response includes edit state, delete state, read count, and reply preview.
+
+Success:
+
+```json
+{
+  "message": "messages fetched",
+  "limit": 50,
+  "offset": 0,
+  "messages": [
+    {
+      "message_id": 20,
+      "sender_id": 3,
+      "sender_username": "scar",
+      "message_text": "yes bro",
+      "is_deleted": false,
+      "created_at": "2026-05-28 10:35:00",
+      "is_edited": false,
+      "edited_at": null,
+      "read_count": 1,
+      "reply_to": {
+        "message_id": 10,
+        "sender_id": 2,
+        "sender_username": "zoro",
+        "message_text": "are you coming?"
+      }
+    }
+  ]
+}
+```
+
+If a message is soft-deleted, its text is returned as:
+
+```txt
+this message was deleted
+```
+
+### `PATCH /messages/{message_id}`
+
+Edits a message. Only the sender can edit. Deleted messages cannot be edited. Messages can only be edited within 5 minutes.
+
+Request body:
+
+```json
+{
+  "message_text": "edited text"
+}
+```
+
+Success:
+
+```json
+{
+  "message": "message edited"
+}
+```
+
+### `DELETE /messages/{message_id}`
+
+Soft deletes a message. Only the sender can delete their own message.
+
+Success:
+
+```json
+{
+  "message": "This message was deleted"
+}
+```
+
+## Read receipt routes
+
+### `POST /chats/{chat_id}/read`
+
+Marks all unread messages in a chat as read for the current user. Own messages and deleted messages are skipped.
+
+Success:
+
+```json
+{
+  "message": "chat marked as read",
+  "marked_count": 4
+}
+```
+
+### `POST /messages/{message_id}/read`
+
+Marks one message as read for the current user. Own messages do not need read receipts.
+
+Success:
+
+```json
+{
+  "message": "message marked as read",
+  "marked": true
+}
+```
+
+If already read:
+
+```json
+{
+  "message": "message already marked as read",
+  "marked": false
+}
+```
+
+### `GET /messages/{message_id}/reads`
+
+Returns who read one message.
+
+Success:
+
+```json
+{
+  "message": "message reads fetched",
+  "message_id": 20,
+  "read_count": 2,
+  "read_by": [
+    {
+      "user_id": 2,
+      "username": "zoro",
+      "read_at": "2026-05-28 10:40:00"
+    }
+  ]
+}
+```
+
+## Group routes
+
+### `POST /groups`
+
+Creates a group. Current user becomes admin and other users become members.
+
+Request body:
+
+```json
+{
+  "name": "PrivateChat Team",
+  "member_ids": [2, 3, 4]
+}
+```
+
+Success:
+
+```json
+{
+  "message": "successfully created group",
+  "chat_id": 5
+}
+```
+
+### `GET /groups`
+
+Fetches all groups where the current user is a member. Includes last message preview and unread count.
+
+Success:
+
+```json
+{
+  "message": "groups fetched",
+  "groups": [
+    {
+      "chat_id": 5,
+      "group_name": "PrivateChat Team",
+      "my_role": "admin",
+      "created_at": "2026-05-28 10:20:00",
+      "last_message": "hello team",
+      "last_message_time": "2026-05-28 10:35:00",
+      "unread_count": 4
+    }
+  ]
+}
+```
+
+### `POST /groups/{chat_id}/members`
+
+Adds a member to a group. Only admins can add members.
+
+Request body:
+
+```json
+{
+  "user_id": 6
+}
+```
+
+Success:
+
+```json
+{
+  "message": "member added"
+}
+```
+
+### `GET /groups/{chat_id}/members`
+
+Fetches group members. Any group member can view this.
+
+Success:
+
+```json
+{
+  "message": "members fetched",
+  "members": [
+    {
+      "user_id": 1,
+      "username": "scar",
+      "role": "admin",
+      "joined_at": "2026-05-28 10:20:00"
+    }
+  ]
+}
+```
+
+### `PATCH /groups/{chat_id}`
+
+Renames a group. Only admins can rename.
+
+Request body:
+
+```json
+{
+  "name": "New Group Name"
+}
+```
+
+Success:
+
+```json
+{
+  "message": "group renamed"
+}
+```
+
+### `PATCH /groups/{chat_id}/members/{user_id}/role`
+
+Changes a member role. Only admins can change roles. Allowed roles are `admin` and `member`. Last admin cannot be demoted.
+
+Request body:
+
+```json
+{
+  "role": "admin"
+}
+```
+
+Success:
+
+```json
+{
+  "message": "role updated"
+}
+```
+
+### `DELETE /groups/{chat_id}/members/{user_id}`
+
+Removes a member from a group. Only admins can remove members. Admin cannot remove themselves using this route, and the last admin cannot be removed.
+
+Success:
+
+```json
+{
+  "message": "member removed"
+}
+```
+
+### `DELETE /groups/{chat_id}/leave`
+
+Current user leaves a group. If they are the last member, the group is deleted. If they are the only admin, they must assign another admin first.
+
+Success:
+
+```json
+{
+  "message": "successfully left group"
+}
+```
+
+If last member:
+
+```json
+{
+  "message": "group deleted because you were the last member"
+}
+```
+
+### `DELETE /groups/{chat_id}`
+
+Deletes the whole group. Only admins can delete groups.
+
+Success:
+
+```json
+{
+  "message": "group deleted"
+}
+```
+
+## Device-token route for push notifications
+
+### `POST /devices/register`
+
+Registers or updates a Firebase/device token for the logged-in user.
+
+Request body:
+
+```json
+{
+  "device_token": "firebase_token_here",
+  "platform": "android"
+}
+```
+
+Allowed platforms:
+
+```txt
+android, ios, web
+```
+
+Success:
+
+```json
+{
+  "message": "device registered"
+}
+```
+
+## WebSocket route
+
+### `WS /ws/{chat_id}?token=TOKEN_HERE`
+
+Used for realtime chat events. User must be a member of the chat.
+
+Supported incoming event types:
+
+### Message event
+
+Normal message:
+
+```json
+{
+  "type": "message",
+  "message_text": "hello"
+}
+```
+
+Reply message:
+
+```json
+{
+  "type": "message",
+  "message_text": "yes bro",
+  "reply_to_message_id": 10
+}
+```
+
+Broadcast response:
+
+```json
+{
+  "type": "message",
+  "message_id": 20,
+  "chat_id": 1,
+  "sender_id": 3,
+  "sender_username": "scar",
+  "message_text": "yes bro",
+  "is_deleted": false,
+  "is_edited": false,
+  "created_at": "2026-05-28 10:35:00",
+  "edited_at": null,
+  "reply_to": {
+    "message_id": 10,
+    "sender_id": 2,
+    "sender_username": "zoro",
+    "message_text": "are you coming?"
+  }
+}
+```
+
+### Typing event
+
+Incoming:
+
+```json
+{
+  "type": "typing"
+}
+```
+
+Broadcast response:
+
+```json
+{
+  "type": "typing",
+  "chat_id": 1,
+  "user_id": 3,
+  "username": "scar"
+}
+```
+
+### Read receipt event
+
+Incoming:
+
+```json
+{
+  "type": "read_receipt",
+  "message_id": 20
+}
+```
+
+Broadcast response:
+
+```json
+{
+  "type": "read_receipt",
+  "chat_id": 1,
+  "message_id": 20,
+  "user_id": 3,
+  "username": "scar",
+  "marked": true
+}
+```
+
+### Online/offline events
+
+When a user connects, other users in the same chat get:
+
+```json
+{
+  "type": "online",
+  "chat_id": 1,
+  "user_id": 3,
+  "username": "scar"
+}
+```
+
+When a user disconnects, other users in the same chat get:
+
+```json
+{
+  "type": "offline",
+  "chat_id": 1,
+  "user_id": 3,
+  "username": "scar"
+}
+```
+
+## Helper files
+
+| File          | Purpose                                          |
+| ------------- | ------------------------------------------------ |
+| `auth.py`     | Creates JWT tokens and checks tokens.            |
+| `database.py` | Opens PostgreSQL connection using `.env` values. |
+| `security.py` | Validates username and email format.             |
+| `util.py`     | Hashes passwords and verifies passwords.         |
+| `devices.py`  | Stores Firebase/device tokens.                   |
+
+## Current MVP status
+
+Completed backend features:
+
+- Registration
+- Login with email or username
+- Token authentication
+- `/me`
+- User search
+- Private chat create/list/open/delete-for-me
+- Group create/list/member management/roles/leave/delete
+- Message send/fetch/edit/soft-delete
+- Message pagination
+- Last message preview
+- Unread count
+- Read receipts
+- Reply to message
+- WebSocket realtime messaging
+- WebSocket typing indicator
+- WebSocket online/offline events
+- WebSocket read receipts
+- Device-token registration for push notifications
+
+Not included in MVP:
+
+- File sharing
+- Voice messages
+- Reactions
+- Block/report
+- Full end-to-end encryption

@@ -12,6 +12,7 @@ class EditMessage(BaseModel):
 class Messages(BaseModel):
     chat_id: int
     message_text: str
+    reply_to_message_id: int | None = None
 
 
 router = APIRouter()
@@ -23,6 +24,7 @@ def send_messages(
 ):
     chat_id = message.chat_id
     message_text = message.message_text.strip()
+    reply_to_message_id = message.reply_to_message_id
     token = authorization
 
     if message_text == "":
@@ -43,43 +45,35 @@ def send_messages(
 
     try:
         cursor = connection.cursor()
+
         cursor.execute("SELECT EXISTS(SELECT 1 FROM chats WHERE id = %s);", (chat_id,))
         chat_exists = cursor.fetchone()[0]
-    finally:
-        cursor.close()
-        connection.close()
+        if not chat_exists:
+            return {"error": "chat does not exist"}
 
-    if not chat_exists:
-        return {"error": "chat does not exist"}
-
-    connection = get_connection()
-    if connection == None:
-        return {"error": "Database connection failed"}
-
-    try:
-        cursor = connection.cursor()
         cursor.execute(
             "SELECT EXISTS(SELECT 1 FROM chat_members WHERE chat_id = %s AND user_id = %s);",
             (chat_id, current_user_id),
         )
         user_exists = cursor.fetchone()[0]
-    finally:
-        cursor.close()
-        connection.close()
 
-    if not user_exists:
-        return {"error": "access denied"}
+        if not user_exists:
+            return {"error": "access denied"}
 
-    connection = get_connection()
-    if connection == None:
-        return {"error": "Database connection failed"}
-
-    try:
-        cursor = connection.cursor()
+        if reply_to_message_id != None:
+            cursor.execute(
+                "SELECT chat_id FROM messages WHERE id = %s;", (reply_to_message_id,)
+            )
+            row = cursor.fetchone()
+            if row == None:
+                return {"error": "reply message does not exist"}
+            reply_chat_id = row[0]
+            if reply_chat_id != chat_id:
+                return {"error": "reply message is not in this chat"}
 
         cursor.execute(
-            "INSERT INTO messages (chat_id, sender_id, message_text) VALUES (%s, %s, %s) RETURNING id;",
-            (chat_id, current_user_id, message_text),
+            "INSERT INTO messages (chat_id, sender_id, message_text, reply_to_message_id) VALUES (%s, %s, %s, %s) RETURNING id;",
+            (chat_id, current_user_id, message_text, reply_to_message_id),
         )
         row = cursor.fetchone()
         if row == None:
@@ -90,6 +84,7 @@ def send_messages(
             "UPDATE chat_members SET is_deleted_for_me = FALSE, deleted_at = NULL WHERE chat_id = %s;",
             (chat_id,),
         )
+
         connection.commit()
     finally:
         cursor.close()
@@ -103,7 +98,10 @@ def send_messages(
 
 @router.get("/messages/{chat_id}")
 def read_messages(
-    chat_id: int, authorization: str = Header(None, alias="Authorization")
+    chat_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    authorization: str = Header(None, alias="Authorization"),
 ):
     token = authorization
 
@@ -115,6 +113,13 @@ def read_messages(
         return {"error": "token invalid or expired"}
     if status == 0:
         current_user_id = token_exists["id"]
+
+    if limit < 1:
+        return {"error": "invalid limit"}
+    if limit > 100:
+        return {"error": "invalid limit"}
+    if offset < 0:
+        return {"error": "invalid offset"}
 
     connection = get_connection()
     if connection == None:
@@ -143,8 +148,8 @@ def read_messages(
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT messages.id, messages.sender_id, users.username, messages.message_text, messages.is_deleted, messages.created_at, messages.is_edited, messages.edited_at FROM messages JOIN users ON messages.sender_id = users.id WHERE messages.chat_id = %s ORDER BY messages.created_at ASC;",
-            (chat_id,),
+            "SELECT messages.id, messages.sender_id, users.username, messages.message_text, messages.is_deleted, messages.created_at, messages.is_edited, messages.edited_at, COUNT(message_reads.id) AS read_count, reply_message.id, reply_message.sender_id, reply_sender.username, reply_message.message_text, reply_message.is_deleted FROM messages JOIN users ON messages.sender_id = users.id LEFT JOIN message_reads ON messages.id = message_reads.message_id LEFT JOIN messages AS reply_message ON messages.reply_to_message_id = reply_message.id LEFT JOIN users AS reply_sender ON reply_message.sender_id = reply_sender.id WHERE messages.chat_id = %s GROUP BY messages.id, users.username, reply_message.id, reply_sender.username ORDER BY messages.created_at DESC LIMIT %s OFFSET %s;",
+            (chat_id, limit, offset),
         )
         rows = cursor.fetchall()
     finally:
@@ -152,6 +157,20 @@ def read_messages(
         connection.close()
 
     for row in rows:
+        if row[9] == None:
+            reply_to = None
+        else:
+            if row[13]:
+                reply_message_text = "this message was deleted"
+            else:
+                reply_message_text = row[12]
+
+            reply_to = {
+                "message_id": row[9],
+                "sender_id": row[10],
+                "sender_username": row[11],
+                "message_text": reply_message_text,
+            }
         if row[4]:
             message_text = "this message was deleted"
         else:
@@ -160,17 +179,21 @@ def read_messages(
         message = {
             "message_id": row[0],
             "sender_id": row[1],
-            "sender_name": row[2],
+            "sender_username": row[2],
             "message_text": message_text,
             "is_deleted": row[4],
             "created_at": str(row[5]),
             "is_edited": row[6],
             "edited_at": str(row[7]) if row[7] != None else None,
+            "read_count": row[8],
+            "reply_to": reply_to,
         }
         messages.append(message)
 
     return {
         "message": "messages fetched",
+        "limit": limit,
+        "offset": offset,
         "messages": messages,
     }
 
@@ -289,3 +312,195 @@ def edit_message(
         connection.close()
 
     return {"message": "message edited"}
+
+
+@router.post("/chats/{chat_id}/read")
+def mark_chat_as_read(
+    chat_id: int, authorization: str = Header(None, alias="Authorization")
+):
+    token = authorization
+
+    token_exists = check_token(token)
+    status = token_exists["status"]
+    if status == 2:
+        return {"error": "Database connection failed"}
+    if status == 1:
+        return {"error": "token invalid or expired"}
+    if status == 0:
+        current_user_id = token_exists["id"]
+
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("SELECT EXISTS(SELECT 1 FROM chats WHERE id = %s);", (chat_id,))
+        chat_exists = cursor.fetchone()[0]
+
+        if not chat_exists:
+            return {"error": "chat does not exist"}
+
+        cursor.execute(
+            "SELECT EXISTS(SELECT 1 FROM chat_members WHERE chat_id = %s AND user_id = %s);",
+            (chat_id, current_user_id),
+        )
+        is_member = cursor.fetchone()[0]
+
+        if not is_member:
+            return {"error": "access denied"}
+
+        cursor.execute(
+            "INSERT INTO message_reads (message_id, user_id) SELECT id, %s FROM messages WHERE chat_id = %s AND sender_id != %s AND is_deleted = FALSE ON CONFLICT (message_id, user_id) DO NOTHING;",
+            (current_user_id, chat_id, current_user_id),
+        )
+        marked_count = cursor.rowcount
+
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+    return {
+        "message": "chat marked as read",
+        "marked_count": marked_count,
+    }
+
+
+@router.post("/messages/{message_id}/read")
+def mark_message_as_read(
+    message_id: int, authorization: str = Header(None, alias="Authorization")
+):
+    token = authorization
+
+    token_exists = check_token(token)
+    status = token_exists["status"]
+    if status == 2:
+        return {"error": "Database connection failed"}
+    if status == 1:
+        return {"error": "token invalid or expired"}
+    if status == 0:
+        current_user_id = token_exists["id"]
+
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "SELECT chat_id, sender_id, is_deleted FROM messages WHERE id = %s;",
+            (message_id,),
+        )
+        row = cursor.fetchone()
+        if row == None:
+            return {"error": "message does not exist"}
+
+        chat_id = row[0]
+        sender_id = row[1]
+        is_deleted = row[2]
+
+        if is_deleted:
+            return {"error": "message deleted"}
+
+        cursor.execute(
+            "SELECT EXISTS(SELECT 1 FROM chat_members WHERE chat_id = %s AND user_id = %s);",
+            (chat_id, current_user_id),
+        )
+        current_user_in_chat = cursor.fetchone()[0]
+        if not current_user_in_chat:
+            return {"error": "access denied"}
+
+        if sender_id == current_user_id:
+            return {
+                "message": "own message does not need read receipt",
+                "marked": False,
+            }
+
+        cursor.execute(
+            "INSERT INTO message_reads (message_id, user_id) VALUES (%s, %s) ON CONFLICT (message_id, user_id) DO NOTHING;",
+            (message_id, current_user_id),
+        )
+        marked = cursor.rowcount == 1
+
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+    return {
+        "message": (
+            "message marked as read" if marked else "message already marked as read"
+        ),
+        "marked": marked,
+    }
+
+
+@router.get("/messages/{message_id}/reads")
+def show_message_reads(
+    message_id: int, authorization: str = Header(None, alias="Authorization")
+):
+    token = authorization
+
+    token_exists = check_token(token)
+    status = token_exists["status"]
+    if status == 2:
+        return {"error": "Database connection failed"}
+    if status == 1:
+        return {"error": "token invalid or expired"}
+    if status == 0:
+        current_user_id = token_exists["id"]
+
+    read_by = []
+
+    connection = get_connection()
+    if connection == None:
+        return {"error": "Database connection failed"}
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "SELECT chat_id FROM messages WHERE id = %s;",
+            (message_id,),
+        )
+        row = cursor.fetchone()
+        if row == None:
+            return {"error": "message does not exist"}
+
+        chat_id = row[0]
+
+        cursor.execute(
+            "SELECT EXISTS(SELECT 1 FROM chat_members WHERE chat_id = %s AND user_id = %s);",
+            (chat_id, current_user_id),
+        )
+        current_user_in_chat = cursor.fetchone()[0]
+        if not current_user_in_chat:
+            return {"error": "access denied"}
+
+        cursor.execute(
+            "SELECT users.id, users.username, message_reads.read_at FROM message_reads JOIN users ON message_reads.user_id = users.id WHERE message_reads.message_id = %s ORDER BY message_reads.read_at ASC;",
+            (message_id,),
+        )
+        rows = cursor.fetchall()
+        read_count = len(rows)
+    finally:
+        cursor.close()
+        connection.close()
+
+    for row in rows:
+        reads = {
+            "user_id": row[0],
+            "username": row[1],
+            "read_at": str(row[2]),
+        }
+        read_by.append(reads)
+
+    return {
+        "message": "message reads fetched",
+        "message_id": message_id,
+        "read_count": read_count,
+        "read_by": read_by,
+    }

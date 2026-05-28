@@ -5,8 +5,10 @@ from src.public_routes.login import router as login_router
 from src.private_routes.chat import router as chat_router
 from src.private_routes.users import router as user_router
 from src.private_routes.groups import router as group_router
+from src.private_routes.devices import router as devices_router
 from src.public_routes.register import router as register_router
 from src.private_routes.messages import router as message_router
+from src.private_routes.websocket import router as websocket_router
 
 app = FastAPI()
 app.include_router(register_router)
@@ -16,6 +18,8 @@ app.include_router(me_router)
 app.include_router(message_router)
 app.include_router(user_router)
 app.include_router(group_router)
+app.include_router(websocket_router)
+app.include_router(devices_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
