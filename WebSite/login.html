@@ -1,149 +1,136 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Login Page</title>
-
-    <style>
-        body {
-            font-family: Arial;
-            background: black;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        .container {
-            position: relative;
-            width: 500px;
-            height: 450px;
-            border-radius: 15px;
-            overflow: hidden;
-        }
-
-        .container::before {
-            content: "";
-            position: absolute;
-            width: 700px;
-            height: 700px;
-            background: linear-gradient(blue, green, blue);
-            animation: rotate 4s linear infinite;
-            top: -35%;
-            left: -20%;
-        }
-
-        .container::after {
-            content: "";
-            position: absolute;
-            inset: 4px;
-            background: white;
-            border-radius: 12px;
-        }
-
-        .form-box {
-            position: relative;
-            z-index: 1;
-            padding: 25px;
-        }
-
-        h1 {
-            text-align: center;
-        }
-
-        input {
-            width: 80%;
-            border-radius: 10px;
-            padding: 10px;
-            margin: 10px 35px;
-            border: 1px solid gray;
-        }
-
-        button {
-            width: 50%;
-            margin-left: 110px;
-            padding: 15px;
-            background: linear-gradient(to right, blue, green);
-            color: white;
-            border-radius: 20px;
-            margin-top: 20px;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .link {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .link a {
-            color: blue;
-        }
-
-        .link a:hover {
-            cursor: pointer;
-            text-decoration: underline;
-        }
-
-        .error {
-            color: red;
-            font-size: 14px;
-            text-align: center;
-            margin: 5px 0;
-        }
-
-        @keyframes rotate {
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chattify - Login</title>
+    <link rel="stylesheet" href="style.css">
 </head>
+<body class="auth-page">
 
-<body>
-
-<div class="container">
-
-    <div class="form-box">
-
-        <h1>Login</h1>
-
-        <input type="text" id="loginUser" placeholder="Enter Username/Email">
-
-        <input type="password" id="loginPass" placeholder="Enter Password">
-
-        <p id="loginError" class="error"></p>
-
-        <button onclick="login()">Login</button>
-
-        <div class="link">
-            <a href="register.html">Don't have an account? Register</a>
+    <!-- Navbar -->
+    <nav>
+        <div class="logo">
+            <img src="VaultChat_Logo.png" class="logo-img" alt="Chattify Logo">
+            <span class="logo-text">Chattify</span>
         </div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="register.html" class="btn-nav">Create Account</a>
+        </div>
+    </nav>
 
-    </div>
+    <!-- Login Section -->
+    <section class="auth-section">
+        <div class="auth-card">
 
-</div>
+            <!-- Logo -->
+            <div class="auth-logo">
+                <img src="VaultChat_Logo.png" class="auth-logo-img" alt="Chattify">
+            </div>
 
-<script>
-    function login() {
+            <!-- Title -->
+            <h1 class="auth-title">Chattify</h1>
+            <p class="auth-subtitle">Secure, intimate conversations.</p>
 
-        let user = document.getElementById("loginUser").value;
-        let pass = document.getElementById("loginPass").value;
-        let error = document.getElementById("loginError");
+            <!-- Form -->
+            <div class="auth-form">
 
-        if(user === "" || pass === "") {
-            error.innerText = "⚠ Please fill all fields";
-            return;
-        }
-     
-        else{
-            alert("Login successful!");
-        }
-            
+                <!-- Email -->
+                <div class="input-group">
+                    <span class="input-icon">✉️</span>
+                    <input 
+                        type="email" 
+                        id="email"
+                        placeholder="Email Address"
+                        class="auth-input"
+                    >
+                </div>
+
+                <!-- Password -->
+                <div class="input-group">
+                    <span class="input-icon">🔒</span>
+                    <input 
+                        type="password" 
+                        id="password"
+                        placeholder="Password"
+                        class="auth-input"
+                    >
+                    <span class="eye-icon" id="togglePassword">👁️</span>
+                </div>
+
+                <!-- Forgot Password -->
+                <div class="forgot-password">
+                    <a href="#">Forgot password?</a>
+                </div>
+
+                <!-- Sign In Button -->
+                <button class="btn-auth" id="loginBtn">
+                    Sign In →
+                </button>
+
+                <!-- Divider -->
+                <div class="divider">
+                    <span>or</span>
+                </div>
+
+                <!-- Sign Up Link -->
+                <p class="auth-switch">
+                    Don't have an account? 
+                    <a href="register.html">Sign Up</a>
+                </p>
+
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Toggle password visibility
+const togglePassword = document.getElementById('togglePassword');
+const password = document.getElementById('password');
+
+togglePassword.addEventListener('click', () => {
+    if (password.type === 'password') {
+        password.type = 'text';
+        togglePassword.textContent = '🙈';
+    } else {
+        password.type = 'password';
+        togglePassword.textContent = '👁️';
     }
-</script>
+});
 
+// Login button
+const loginBtn = document.getElementById('loginBtn');
+loginBtn.addEventListener('click', () => {
+    const email = document.getElementById('email').value;
+    const pass = document.getElementById('password').value;
+
+    if (email === '' || pass === '') {
+        alert('Please fill in all fields!');
+        return;
+    }
+
+    // Loading state
+    loginBtn.textContent = 'Signing in...';
+    loginBtn.disabled = true;
+
+    // Simulate login - connect to your backend here
+    setTimeout(() => {
+        loginBtn.textContent = 'Sign In →';
+        loginBtn.disabled = false;
+        window.location.href = 'chat.html';
+    }, 1500);
+});
+
+// Input focus effects
+document.querySelectorAll('.auth-input').forEach(input => {
+    input.addEventListener('focus', () => {
+        input.parentElement.style.filter = 'drop-shadow(0 0 8px rgba(0, 201, 167, 0.3))';
+    });
+    input.addEventListener('blur', () => {
+        input.parentElement.style.filter = 'none';
+    });
+});
+    </script>
 </body>
 </html>
