@@ -26,9 +26,9 @@ def get_connection():
 	    sslmode="require",
         )
         return connection
-    except psycopg.OperationalError:
+    except psycopg.OperationalError as error:
         print(
-            "Database connection failed. Check database name, user, password, host, port, or PostgreSQL service."
+            "Database connection failed. Check database name, user, password, host, port, or PostgreSQL service.", repr(error)
         )
         return None
     except Exception as error:
