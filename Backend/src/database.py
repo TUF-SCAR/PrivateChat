@@ -28,7 +28,7 @@ def get_connection():
         return connection
     except psycopg.OperationalError as error:
         print(
-            "Database connection failed. Check database name, user, password, host, port, or PostgreSQL service.", repr(error)
+            "Database connection failed. Check database name, user, password, host, port, or PostgreSQL service.!", repr(error)
         )
         return None
     except Exception as error:
