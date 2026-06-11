@@ -9,6 +9,11 @@ DATABASE_PASSWORD = getenv("DATABASE_PASSWORD")
 DATABASE_HOST = getenv("DATABASE_HOST")
 DATABASE_PORT = getenv("DATABASE_PORT")
 
+print(DATABASE_NAME)
+print(DATABASE_USER)
+print(DATABASE_HOST)
+print(DATABASE_PORT)
+
 
 def get_connection():
     try:
