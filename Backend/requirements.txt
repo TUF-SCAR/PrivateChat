@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+psycopg[binary]
+python-dotenv
+python-jose[cryptography]
+passlib[bcrypt]
+pydantic
+firebase-admin

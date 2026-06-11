@@ -18,6 +18,7 @@ def get_connection():
             password=DATABASE_PASSWORD,
             host=DATABASE_HOST,
             port=DATABASE_PORT,
+	    sslmode="require",
         )
         return connection
     except psycopg.OperationalError:
