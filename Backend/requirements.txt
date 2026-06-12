@@ -4,6 +4,6 @@ psycopg[binary]
 python-dotenv
 python-jose[cryptography]
 passlib[bcrypt]
-bcrypt<5
+bcrypt==4.0.1
 pydantic
 firebase-admin
