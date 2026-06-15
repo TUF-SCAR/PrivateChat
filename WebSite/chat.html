@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chattify</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="chat-page">
+
+    <!-- Main Chat Layout -->
+    <div class="chat-container">
+
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+
+            <!-- App Logo -->
+            <div class="sidebar-logo">
+                <img src="VaultChat_Logo.png" class="logo-img" alt="Chattify">
+                <span class="logo-text">Chattify</span>
+            </div>
+
+            <!-- Search -->
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Search conversations..." class="search-input" id="searchInput">
+            </div>
+
+            <!-- Chat List -->
+            <div class="chat-list" id="chatList">
+
+                <div class="chat-item active" onclick="openChat('Sarah Chen', 'SC', '#00C9A7')">
+                    <div class="chat-avatar" style="background:#00C9A7">SC</div>
+                    <div class="chat-info">
+                        <div class="chat-name">Sarah Chen</div>
+                        <div class="chat-preview">Are we still on for tomorrow?</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">10:42 AM</div>
+                        <div class="chat-badge">2</div>
+                    </div>
+                </div>
+
+                <div class="chat-item" onclick="openChat('Alex Rivera', 'AR', '#7B2FBE')">
+                    <div class="chat-avatar" style="background:#7B2FBE">AR</div>
+                    <div class="chat-info">
+                        <div class="chat-name">Alex Rivera</div>
+                        <div class="chat-preview">Just sent the encrypted files.</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">Yesterday</div>
+                    </div>
+                </div>
+
+                <div class="chat-item" onclick="openChat('Design Team', 'DT', '#E91E8C')">
+                    <div class="chat-avatar" style="background:#E91E8C">DT</div>
+                    <div class="chat-info">
+                        <div class="chat-name">Design Team</div>
+                        <div class="chat-preview">Marcus: The new dark mode looks g...</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">Yesterday</div>
+                        <div class="chat-badge">5</div>
+                    </div>
+                </div>
+
+                <div class="chat-item" onclick="openChat('Elena Rostova', 'ER', '#FF6B35')">
+                    <div class="chat-avatar" style="background:#FF6B35">ER</div>
+                    <div class="chat-info">
+                        <div class="chat-name">Elena Rostova</div>
+                        <div class="chat-preview">Thanks! I'll take a look later.</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">Tuesday</div>
+                    </div>
+                </div>
+
+                <div class="chat-item" onclick="openChat('David Kim', 'DK', '#F59E0B')">
+                    <div class="chat-avatar" style="background:#F59E0B">DK</div>
+                    <div class="chat-info">
+                        <div class="chat-name">David Kim</div>
+                        <div class="chat-preview">Can you review the PR?</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">Monday</div>
+                    </div>
+                </div>
+
+                <div class="chat-item" onclick="openChat('Project Alpha', 'PA', '#10B981')">
+                    <div class="chat-avatar" style="background:#10B981">PA</div>
+                    <div class="chat-info">
+                        <div class="chat-name">Project Alpha</div>
+                        <div class="chat-preview">Meeting moved to 3PM.</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">Sunday</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- User Profile Bottom -->
+            <div class="sidebar-user">
+                <div class="user-avatar">MC</div>
+                <div class="user-info">
+                    <div class="user-name">Marcus Cole</div>
+                    <div class="user-status">● Online</div>
+                </div>
+                <div class="user-icons">
+                    <a href="profile.html">⚙️</a>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-main">
+
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="header-left">
+                    <div class="header-avatar" id="headerAvatar" style="background:#00C9A7">SC</div>
+                    <div class="header-info">
+                        <div class="header-name" id="headerName">Sarah Chen</div>
+                        <div class="header-status">● Online</div>
+                    </div>
+                </div>
+                <div class="header-icons">
+                    <button class="icon-btn">📞</button>
+                    <button class="icon-btn">📹</button>
+                    <button class="icon-btn">⋮</button>
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="messages-area" id="messagesArea">
+
+                <!-- Received Message -->
+                <div class="message received">
+                    <div class="msg-avatar" style="background:#00C9A7">SC</div>
+                    <div class="msg-content">
+                        <div class="msg-bubble received-bubble">
+                            Hey! Did you review the proposal?
+                        </div>
+                        <div class="msg-time">10:30 AM</div>
+                    </div>
+                </div>
+
+                <!-- Sent Message -->
+                <div class="message sent">
+                    <div class="msg-content">
+                        <div class="msg-bubble sent-bubble">
+                            Yes, just finished reading it.
+                        </div>
+                        <div class="msg-time">10:35 AM ✓✓</div>
+                    </div>
+                </div>
+
+                <!-- Sent Message -->
+                <div class="message sent">
+                    <div class="msg-content">
+                        <div class="msg-bubble sent-bubble">
+                            Looks solid overall. Added comments on the security section.
+                        </div>
+                        <div class="msg-time">10:35 AM ✓✓</div>
+                    </div>
+                </div>
+
+                <!-- Received Message -->
+                <div class="message received">
+                    <div class="msg-avatar" style="background:#00C9A7">SC</div>
+                    <div class="msg-content">
+                        <div class="msg-bubble received-bubble">
+                            Perfect. I'll check those out now.
+                        </div>
+                        <div class="msg-time">10:38 AM</div>
+                    </div>
+                </div>
+
+                <!-- Received Message -->
+                <div class="message received">
+                    <div class="msg-avatar" style="background:#00C9A7">SC</div>
+                    <div class="msg-content">
+                        <div class="msg-bubble received-bubble">
+                            Are we still on for the 2PM sync?
+                        </div>
+                        <div class="msg-time">10:39 AM</div>
+                    </div>
+                </div>
+
+                <!-- Sent Message -->
+                <div class="message sent">
+                    <div class="msg-content">
+                        <div class="msg-bubble sent-bubble">
+                            Absolutely. I'll send the encrypted link in a bit.
+                        </div>
+                        <div class="msg-time">10:41 AM ✓</div>
+                    </div>
+                </div>
+
+                <!-- Received Message -->
+                <div class="message received">
+                    <div class="msg-avatar" style="background:#00C9A7">SC</div>
+                    <div class="msg-content">
+                        <div class="msg-bubble received-bubble">
+                            Great, talk soon.
+                        </div>
+                        <div class="msg-time">10:42 AM</div>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div class="message received" id="typingIndicator" style="display:none;">
+                    <div class="msg-avatar" style="background:#00C9A7">SC</div>
+                    <div class="msg-content">
+                        <div class="msg-bubble received-bubble typing">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Message Input -->
+            <div class="message-input-area">
+                <button class="input-btn">➕</button>
+                <input 
+                    type="text" 
+                    placeholder="Message..." 
+                    class="message-input"
+                    id="messageInput"
+                >
+                <button class="input-btn">😊</button>
+                <button class="input-btn">🎤</button>
+                <button class="send-btn" id="sendBtn">➤</button>
+            </div>
+
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="right-sidebar">
+            <div class="right-profile">
+                <div class="right-avatar" id="rightAvatar" style="background:#00C9A7">SC</div>
+                <div class="right-name" id="rightName">Sarah Chen</div>
+                <div class="right-status">● Online</div>
+            </div>
+            <div class="right-options">
+                <div class="right-option">🔔 Notifications</div>
+                <div class="right-option">🔒 Encryption</div>
+                <div class="right-option">📁 Shared Files</div>
+                <div class="right-option">🚫 Block User</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Send message
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const messagesArea = document.getElementById('messagesArea');
+
+function sendMessage() {
+    const text = messageInput.value.trim();
+    if (text === '') return;
+
+    // Create message
+    const message = document.createElement('div');
+    message.classList.add('message', 'sent');
+    message.innerHTML = `
+        <div class="msg-content">
+            <div class="msg-bubble sent-bubble">${text}</div>
+            <div class="msg-time">${getTime()} ✓</div>
+        </div>
+    `;
+
+    // Remove typing indicator and add message
+    const typing = document.getElementById('typingIndicator');
+    messagesArea.insertBefore(message, typing);
+
+    // Clear input
+    messageInput.value = '';
+
+    // Scroll to bottom
+    scrollToBottom();
+
+    // Show typing indicator
+    showTyping();
+}
+
+// Send on button click
+sendBtn.addEventListener('click', sendMessage);
+
+// Send on Enter key
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+});
+
+// Show typing indicator
+function showTyping() {
+    const typing = document.getElementById('typingIndicator');
+    typing.style.display = 'flex';
+    scrollToBottom();
+
+    // Hide after 2 seconds and show reply
+    setTimeout(() => {
+        typing.style.display = 'none';
+        showReply();
+    }, 2000);
+}
+
+// Auto reply
+const replies = [
+    'Got it! 👍',
+    'Sure, sounds good!',
+    'Let me check and get back to you.',
+    'Absolutely! 🔒',
+    'On it!',
+    'Thanks for letting me know!',
+];
+
+function showReply() {
+    const reply = replies[Math.floor(Math.random() * replies.length)];
+    const headerAvatar = document.getElementById('headerAvatar');
+
+    const message = document.createElement('div');
+    message.classList.add('message', 'received');
+    message.innerHTML = `
+        <div class="msg-avatar" style="background:${headerAvatar.style.background}">${headerAvatar.textContent}</div>
+        <div class="msg-content">
+            <div class="msg-bubble received-bubble">${reply}</div>
+            <div class="msg-time">${getTime()}</div>
+        </div>
+    `;
+
+    const typing = document.getElementById('typingIndicator');
+    messagesArea.insertBefore(message, typing);
+    scrollToBottom();
+}
+
+// Get current time
+function getTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Scroll to bottom
+function scrollToBottom() {
+    messagesArea.scrollTop = messagesArea.scrollHeight;
+}
+
+// Open chat
+function openChat(name, initials, color) {
+    // Update header
+    document.getElementById('headerName').textContent = name;
+    document.getElementById('headerAvatar').textContent = initials;
+    document.getElementById('headerAvatar').style.background = color;
+
+    // Update right sidebar
+    document.getElementById('rightName').textContent = name;
+    document.getElementById('rightAvatar').textContent = initials;
+    document.getElementById('rightAvatar').style.background = color;
+
+    // Update active chat item
+    document.querySelectorAll('.chat-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    event.currentTarget.classList.add('active');
+
+    // Remove badge
+    const badge = event.currentTarget.querySelector('.chat-badge');
+    if (badge) badge.remove();
+}
+
+// Search conversations
+document.getElementById('searchInput').addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const name = item.querySelector('.chat-name').textContent.toLowerCase();
+        item.style.display = name.includes(query) ? 'flex' : 'none';
+    });
+});
+
+// Scroll to bottom on load
+scrollToBottom();
+    </script>
+</body>
+</html>

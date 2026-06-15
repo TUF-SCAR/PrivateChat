@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VaultChat – Profile</title>
+<link href="style.css" rel="stylesheet"/>
+</head>
+<body>
+ 
+<div class="phone">
+ 
+  <!-- Hero Banner -->
+  <div class="hero-banner">
+    <div class="grid-lines">
+      <svg viewBox="0 0 390 220" preserveAspectRatio="none">
+        <defs><pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M 30 0 L 0 0 0 30" fill="none" stroke="white" stroke-width="0.5"/></pattern></defs>
+        <rect width="390" height="220" fill="url(#grid)"/>
+      </svg>
+    </div>
+ 
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="top-title">Profile</span>
+      <button class="edit-btn" id="editBtn" onclick="toggleEdit()">Edit</button>
+    </div>
+ 
+    <!-- Avatar -->
+    <div class="avatar-zone">
+      <div class="avatar-wrap" onclick="triggerAvatarUpload()">
+        <div class="avatar-ring"></div>
+        <div class="avatar-inner" id="avatarInner">
+          <img id="avatarImg" src="" alt="avatar"/>
+          <span id="avatarInitials">MC</span>
+        </div>
+        <div class="online-dot"></div>
+        <div class="camera-overlay">
+          <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="avatarInput" accept="image/*" onchange="handleAvatarUpload(event)"/>
+  </div>
+ 
+  <!-- Profile Body -->
+  <div class="profile-body">
+ 
+    <!-- Name & Handle -->
+    <div class="name-section">
+      <p class="edit-hint" id="editHint">✦ Tap fields to edit</p>
+      <div class="display-name" id="displayName" contenteditable="false">Marcus Cole</div>
+      <div class="handle-row">
+        <span class="handle" id="handleText">@mcole_secure</span>
+        <button class="copy-btn" onclick="copyHandle()">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <p class="bio" id="bioText">Cryptography enthusiast. Signal over noise. Always encrypt everything.</p>
+    </div>
+ 
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat">
+        <span class="stat-num" id="msgCount">1.2K</span>
+        <span class="stat-label">Messages</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num" id="contactCount">48</span>
+        <span class="stat-label">Contacts</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num">256</span>
+        <span class="stat-label">Enc-bit</span>
+      </div>
+    </div>
+ 
+    <!-- Contact Info -->
+    <div class="section">
+      <p class="section-label">Contact Info</p>
+      <div class="info-card">
+        <div class="info-row">
+          <div class="info-icon icon-teal">
+            <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.35 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.7A16 16 0 0 0 14 15.09l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          </div>
+          <div class="info-content">
+            <div class="info-key">Phone</div>
+            <input class="info-val editable" id="phoneVal" value="+1 (555) 019-2834" readonly/>
+          </div>
+          <span class="info-action" onclick="editField('phoneVal')">
+            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+        <div class="info-row">
+          <div class="info-icon icon-purple">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div class="info-content">
+            <div class="info-key">Email</div>
+            <input class="info-val editable" id="emailVal" value="marcus@vaultchat.io" readonly/>
+          </div>
+          <span class="info-action" onclick="editField('emailVal')">
+            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+        <div class="info-row">
+          <div class="info-icon icon-blue">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <div class="info-content">
+            <div class="info-key">Joined</div>
+            <div class="info-val">October 2023</div>
+          </div>
+        </div>
+      </div>
+    </div>
+ 
+    <!-- Security -->
+    <div class="section">
+      <p class="section-label">Security</p>
+      <div class="info-card">
+        <div class="action-row" onclick="navTo('privacy')">
+          <div class="info-icon icon-teal" style="margin-right:12px">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Privacy Checkup</div>
+            <div class="action-sub">Manage who sees your info</div>
+          </div>
+          <div class="action-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <div class="action-row" onclick="navTo('keys')">
+          <div class="info-icon icon-orange" style="margin-right:12px">
+            <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Security Keys</div>
+            <div class="action-sub">End-to-end encryption</div>
+          </div>
+          <span class="badge badge-teal">E2E</span>
+          <div class="action-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <div class="action-row" onclick="navTo('devices')">
+          <div class="info-icon icon-purple" style="margin-right:12px">
+            <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Linked Devices</div>
+            <div class="action-sub">2 active sessions</div>
+          </div>
+          <span class="badge badge-purple">2</span>
+          <div class="action-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+ 
+    <!-- Danger Zone -->
+    <div class="section">
+      <button class="danger-btn" onclick="showLogoutModal()">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </button>
+    </div>
+ 
+    <div style="height:20px;"></div>
+  </div><!-- /profile-body -->
+ 
+  <!-- Bottom Nav -->
+  <div class="bottom-nav">
+    <div class="nav-item" onclick="goHome()">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span class="nav-label">Chats</span>
+    </div>
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="nav-label">Profile</span>
+    </div>
+    <div class="nav-item" onclick="goSettings()">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="nav-label">Settings</span>
+    </div>
+  </div>
+</div>
+ 
+<!-- Logout Modal -->
+<div class="modal-overlay" id="logoutModal">
+  <div class="modal">
+    <h3>Sign Out?</h3>
+    <p>You'll be logged out of VaultChat. Your encrypted messages will remain secure on this device.</p>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-btn confirm" onclick="confirmLogout()">Sign Out</button>
+    </div>
+  </div>
+</div>
+ <script>
+  let isEditing = false;
+ 
+  /* ── Edit Mode ── */
+  function toggleEdit() {
+    const btn = document.getElementById('editBtn');
+    const hint = document.getElementById('editHint');
+    const nameEl = document.getElementById('displayName');
+    const bioEl = document.getElementById('bioText');
+    const inputs = document.querySelectorAll('.info-val.editable');
+ 
+    if (!isEditing) {
+      isEditing = true;
+      btn.textContent = 'Save';
+      btn.classList.remove('saving');
+      hint.style.display = 'block';
+      nameEl.contentEditable = 'true';
+      nameEl.style.outline = 'none';
+      nameEl.style.borderBottom = '1px solid var(--teal)';
+      nameEl.focus();
+      inputs.forEach(i => i.removeAttribute('readonly'));
+      document.body.classList.add('edit-mode');
+    } else {
+      isEditing = false;
+      btn.textContent = 'Saved ✓';
+      btn.classList.add('saving');
+      hint.style.display = 'none';
+      nameEl.contentEditable = 'false';
+      nameEl.style.borderBottom = 'none';
+      inputs.forEach(i => i.setAttribute('readonly', true));
+      document.body.classList.remove('edit-mode');
+ 
+      // Update handle from name
+      const newName = nameEl.textContent.trim();
+      if (newName) {
+        const parts = newName.toLowerCase().split(' ');
+        document.getElementById('handleText').textContent =
+          '@' + parts.join('_') + '_secure';
+        updateInitials(newName);
+      }
+ 
+      setTimeout(() => {
+        btn.textContent = 'Edit';
+        btn.classList.remove('saving');
+      }, 1500);
+    }
+  }
+ 
+  function editField(id) {
+    if (!isEditing) toggleEdit();
+    document.getElementById(id).focus();
+  }
+ 
+  /* ── Initials / Avatar ── */
+  function updateInitials(name) {
+    const parts = name.trim().split(' ');
+    const init = parts.length >= 2
+      ? parts[0][0].toUpperCase() + parts[1][0].toUpperCase()
+      : parts[0].slice(0,2).toUpperCase();
+    document.getElementById('avatarInitials').textContent = init;
+  }
+ 
+  function triggerAvatarUpload() {
+    document.getElementById('avatarInput').click();
+  }
+ 
+  function handleAvatarUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.getElementById('avatarImg');
+      img.src = ev.target.result;
+      img.style.display = 'block';
+      document.getElementById('avatarInitials').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+ 
+  /* ── Copy Handle ── */
+  function copyHandle() {
+    const handle = document.getElementById('handleText').textContent;
+    navigator.clipboard.writeText(handle).then(() => {
+      const btn = document.querySelector('.copy-btn');
+      btn.style.background = 'rgba(0,212,160,0.2)';
+      setTimeout(() => btn.style.background = '', 1000);
+    });
+  }
+ 
+  /* ── Navigation ── */
+  function goBack()     { window.location.href = 'chat.html';     }
+  function goHome()     { window.location.href = 'chat.html';     }
+  function goSettings() { window.location.href = 'settings.html'; }
+  function navTo(page)  { console.log('navigate to', page);       }
+ 
+  /* ── Logout Modal ── */
+  function showLogoutModal() {
+    document.getElementById('logoutModal').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('logoutModal').classList.remove('open');
+  }
+  function confirmLogout() {
+    closeModal();
+    window.location.href = 'login.html';
+  }
+ 
+  // Close modal on overlay click
+  document.getElementById('logoutModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+ 
+  /* ── Animate stats on load ── */
+  function animateCount(el, target, suffix='') {
+    let current = 0;
+    const isDecimal = target.toString().includes('.');
+    const numTarget = parseFloat(target);
+    const duration = 1000;
+    const step = numTarget / (duration / 16);
+    const timer = setInterval(() => {
+      current += step;
+      if (current >= numTarget) {
+        current = numTarget;
+        clearInterval(timer);
+      }
+      el.textContent = isDecimal
+        ? current.toFixed(1) + 'K'
+        : Math.floor(current) + suffix;
+    }, 16);
+  }
+ 
+  window.addEventListener('load', () => {
+    animateCount(document.getElementById('msgCount'), 1.2, '');
+    animateCount(document.getElementById('contactCount'), 48);
+  });
+</script>
+</body>
+</html>

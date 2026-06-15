@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chattify - Settings</title>
+    <link rel="stylesheet" href="style.css">
+    </head>
+<body class="settings-page">
+ 
+<div class="settings-container">
+ 
+    <!-- Left Sidebar (reused) -->
+    <div class="sidebar">
+        <div class="sidebar-logo">
+            <img src="VaultChat_Logo.png" class="logo-img" alt="Chattify">
+            <span class="logo-text">Chattify</span>
+        </div>
+ 
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Search conversations..." class="search-input">
+        </div>
+ 
+        <div class="chat-list">
+            <div class="chat-item" onclick="window.location.href='chat.html'">
+                <div class="chat-avatar" style="background:#00C9A7">SC</div>
+                <div class="chat-info">
+                    <div class="chat-name">Sarah Chen</div>
+                    <div class="chat-preview">Are we still on for tomorrow?</div>
+                </div>
+                <div class="chat-meta">
+                    <div class="chat-time">10:42 AM</div>
+                    <div class="chat-badge">2</div>
+                </div>
+            </div>
+            <div class="chat-item" onclick="window.location.href='chat.html'">
+                <div class="chat-avatar" style="background:#7B2FBE">AR</div>
+                <div class="chat-info">
+                    <div class="chat-name">Alex Rivera</div>
+                    <div class="chat-preview">Just sent the encrypted files.</div>
+                </div>
+                <div class="chat-meta"><div class="chat-time">Yesterday</div></div>
+            </div>
+            <div class="chat-item" onclick="window.location.href='chat.html'">
+                <div class="chat-avatar" style="background:#E91E8C">DT</div>
+                <div class="chat-info">
+                    <div class="chat-name">Design Team</div>
+                    <div class="chat-preview">Marcus: The new dark mode looks g...</div>
+                </div>
+                <div class="chat-meta">
+                    <div class="chat-time">Yesterday</div>
+                    <div class="chat-badge">5</div>
+                </div>
+            </div>
+            <div class="chat-item" onclick="window.location.href='chat.html'">
+                <div class="chat-avatar" style="background:#FF6B35">ER</div>
+                <div class="chat-info">
+                    <div class="chat-name">Elena Rostova</div>
+                    <div class="chat-preview">Thanks! I'll take a look later.</div>
+                </div>
+                <div class="chat-meta"><div class="chat-time">Tuesday</div></div>
+            </div>
+        </div>
+ 
+        <div class="sidebar-user">
+            <div class="user-avatar">MC</div>
+            <div class="user-info">
+                <div class="user-name">Marcus Cole</div>
+                <div class="user-status">● Online</div>
+            </div>
+            <div class="user-icons">
+                <a href="profile.html">⚙️</a>
+            </div>
+        </div>
+    </div>
+ 
+    <!-- Main Settings Area -->
+    <div class="settings-main">
+ 
+        <!-- Header -->
+        <div class="settings-header">
+            <a href="chat.html" class="settings-back-btn">←</a>
+            <span class="settings-header-title">Settings</span>
+        </div>
+ 
+        <!-- Scrollable Content -->
+        <div class="settings-content">
+ 
+            <!-- Profile Card -->
+            <a href="profile.html" class="settings-profile-card">
+                <div class="settings-profile-avatar">MC</div>
+                <div class="settings-profile-info">
+                    <div class="settings-profile-name">Marcus Cole</div>
+                    <div class="settings-profile-handle">@mcole_secure · View Profile</div>
+                </div>
+                <span class="settings-profile-arrow">›</span>
+            </a>
+ 
+            <!-- Privacy & Security -->
+            <div>
+                <p class="settings-section-label">Privacy & Security</p>
+                <div class="settings-group">
+ 
+                    <div class="settings-row">
+                        <div class="settings-row-icon icon-teal">🛡️</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Read Receipts</div>
+                            <div class="settings-row-sub">Show when you've read messages</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="readReceipts">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+ 
+                    <div class="settings-row">
+                        <div class="settings-row-icon icon-purple">👁️</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Typing Indicators</div>
+                            <div class="settings-row-sub">Let others see when you type</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="typingIndicators" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+ 
+                    <div class="settings-row">
+                        <div class="settings-row-icon icon-blue">🌐</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Last Seen</div>
+                            <div class="settings-row-sub">Who can see when you were active</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="lastSeen">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+ 
+                    <div class="settings-row" onclick="showToast('📱 Linked Devices opened')">
+                        <div class="settings-row-icon icon-gray">📱</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Linked Devices</div>
+                            <div class="settings-row-sub">2 active sessions</div>
+                        </div>
+                        <span class="settings-badge">2</span>
+                        <span class="settings-arrow">›</span>
+                    </div>
+ 
+                    <div class="settings-row" onclick="showToast('🔒 App Lock settings opened')">
+                        <div class="settings-row-text">
+                    </div>
+                    </div>
+                </div>
+            </div>
+ 
+            <!-- Notifications & Sound -->
+            <div>
+                <p class="settings-section-label">Notifications & Sound</p>
+                <div class="settings-group">
+ 
+                    <div class="settings-row">
+                        <div class="settings-row-icon icon-red">🔔</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Push Notifications</div>
+                            <div class="settings-row-sub">Alerts for new messages</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pushNotifications" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+ 
+                    <div class="settings-row">
+                        <div class="settings-row-icon icon-blue">🔊</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Sound Alerts</div>
+                            <div class="settings-row-sub">Play sound on new message</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="soundAlerts" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+ 
+                    <div class="settings-row">
+                        <div class="settings-row-icon icon-green">📳</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Haptic Feedback</div>
+                            <div class="settings-row-sub">Vibrate on interactions</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="hapticFeedback" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+ 
+                </div>
+            </div>
+ 
+            <!-- Appearance -->
+            <div>
+                <p class="settings-section-label">Appearance</p>
+                <div class="settings-group">
+ 
+                    <div class="settings-row" onclick="showToast('🎨 Theme settings coming soon!')">
+                        <div class="settings-row-icon icon-purple">🎨</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Theme</div>
+                            <div class="settings-row-sub">Dark mode enabled</div>
+                        </div>
+                        <span class="settings-badge settings-badge-purple">Dark</span>
+                        <span class="settings-arrow">›</span>
+                    </div>
+ 
+                    <div class="settings-row" onclick="showToast('🔤 Font size settings coming soon!')">
+                        <div class="settings-row-icon icon-teal">🔤</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Font Size</div>
+                            <div class="settings-row-sub">Medium</div>
+                        </div>
+                        <span class="settings-arrow">›</span>
+                    </div>
+ 
+                </div>
+            </div>
+ 
+ 
+            <!-- Danger Zone -->
+            <div>
+                <p class="settings-section-label">Account</p>
+                <div class="settings-group">
+ 
+                    <div class="settings-danger-row" onclick="showLogoutModal()">
+                        <div class="settings-row-icon icon-red">🚪</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Sign Out</div>
+                            <div class="settings-row-sub">Log out of your account</div>
+                        </div>
+                        <span class="settings-arrow" style="color:#ff4d6d">›</span>
+                    </div>
+ 
+                    <div class="settings-danger-row" onclick="showDeleteModal()">
+                        <div class="settings-row-icon icon-red">⚠️</div>
+                        <div class="settings-row-text">
+                            <div class="settings-row-title">Delete Account</div>
+                            <div class="settings-row-sub">Permanently remove your data</div>
+                        </div>
+                        <span class="settings-arrow" style="color:#ff4d6d">›</span>
+                    </div>
+ 
+                </div>
+            </div>
+ 
+            <!-- Version Footer -->
+            <div class="settings-footer">
+                <p class="settings-version">Chattify v1.0.0 · Built with <span>♥</span> & 🔒</p>
+            </div>
+ 
+        </div>
+    </div>
+</div>
+ 
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+ 
+<!-- Logout Modal -->
+<div class="modal-overlay" id="logoutModal">
+    <div class="modal-box">
+        <h3>Sign Out?</h3>
+        <p>You'll be logged out of Chattify. Your encrypted messages stay safe on this device.</p>
+        <div class="modal-actions">
+            <button class="modal-btn modal-cancel" onclick="closeModals()">Cancel</button>
+            <button class="modal-btn modal-confirm" onclick="confirmLogout()">Sign Out</button>
+        </div>
+    </div>
+</div>
+ 
+<!-- Delete Account Modal -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal-box">
+        <h3>Delete Account?</h3>
+        <p>This will permanently delete your account and all messages. This action <strong>cannot</strong> be undone.</p>
+        <div class="modal-actions">
+            <button class="modal-btn modal-cancel" onclick="closeModals()">Cancel</button>
+            <button class="modal-btn modal-confirm" onclick="confirmLogout()">Delete</button>
+        </div>
+    </div>
+</div>
+ 
+<script>
+    // ── Toast ──
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+ 
+    // ── Toggle listeners ──
+    const toggleMessages = {
+        readReceipts:      ['Read Receipts ON ✓', 'Read Receipts OFF'],
+        typingIndicators:  ['Typing Indicators ON ✓', 'Typing Indicators OFF'],
+        lastSeen:          ['Last Seen visible to all', 'Last Seen hidden'],
+        pushNotifications: ['Push Notifications ON 🔔', 'Notifications muted 🔕'],
+        soundAlerts:       ['Sound Alerts ON 🔊', 'Sound Alerts OFF 🔇'],
+        hapticFeedback:    ['Haptic Feedback ON 📳', 'Haptic Feedback OFF'],
+    };
+ 
+    Object.keys(toggleMessages).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                const msgs = toggleMessages[id];
+                showToast(el.checked ? msgs[0] : msgs[1]);
+                saveSettings();
+            });
+        }
+    });
+ 
+    // ── Persist settings ──
+    function saveSettings() {
+        const settings = {};
+        Object.keys(toggleMessages).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) settings[id] = el.checked;
+        });
+        localStorage.setItem('chattify_settings', JSON.stringify(settings));
+    }
+ 
+    function loadSettings() {
+        const saved = localStorage.getItem('chattify_settings');
+        if (!saved) return;
+        const settings = JSON.parse(saved);
+        Object.keys(settings).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.checked = settings[id];
+        });
+    }
+ 
+    loadSettings();
+ 
+    // ── Modals ──
+    function showLogoutModal() {
+        document.getElementById('logoutModal').classList.add('open');
+    }
+ 
+    function showDeleteModal() {
+        document.getElementById('deleteModal').classList.add('open');
+    }
+ 
+    function closeModals() {
+        document.getElementById('logoutModal').classList.remove('open');
+        document.getElementById('deleteModal').classList.remove('open');
+    }
+ 
+    function confirmLogout() {
+        closeModals();
+        localStorage.removeItem('chattify_settings');
+        window.location.href = 'login.html';
+    }
+ 
+    // Close modal on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) closeModals();
+        });
+    });
+</script>
+</body>
+</html>
+ 
