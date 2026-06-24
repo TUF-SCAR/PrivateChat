@@ -1,4 +1,4 @@
-package com.PrivateChat.chattify
+package com.scar.chattify
 
 import io.flutter.embedding.android.FlutterActivity
 
