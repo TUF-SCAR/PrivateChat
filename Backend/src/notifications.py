@@ -1,4 +1,7 @@
 from pathlib import Path
+from os import getenv
+import json
+
 import firebase_admin
 from firebase_admin import credentials, messaging
 
@@ -17,19 +20,29 @@ def setup_firebase():
         firebase_app_ready = True
         return True
 
-    service_account_path = (
-        Path(__file__).resolve().parent / "firebase-service-account.json"
-    )
-
-    if not service_account_path.exists():
-        print("Firebase service account file not found:", service_account_path)
-        return False
-
     try:
+        firebase_json = getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+
+        if firebase_json != None and firebase_json.strip() != "":
+            service_account_info = json.loads(firebase_json)
+            cred = credentials.Certificate(service_account_info)
+            firebase_admin.initialize_app(cred)
+            firebase_app_ready = True
+            return True
+
+        service_account_path = (
+            Path(__file__).resolve().parent / "firebase-service-account.json"
+        )
+
+        if not service_account_path.exists():
+            print("Firebase service account file not found:", service_account_path)
+            return False
+
         cred = credentials.Certificate(str(service_account_path))
         firebase_admin.initialize_app(cred)
         firebase_app_ready = True
         return True
+
     except Exception as error:
         print("Firebase setup failed:", error)
         return False
