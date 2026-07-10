@@ -1,6 +1,82 @@
 # PrivateChat Backend Details
 
-PrivateChat backend is a FastAPI + PostgreSQL chat backend. It supports account auth, private chats, group chats, messaging, message editing/deleting, pagination, read receipts, replies, WebSocket realtime events, and device-token registration for push notifications.
+PrivateChat backend is a **FastAPI + PostgreSQL** chat backend.
+
+It supports account authentication, private chats, group chats, messaging, GIF messages, message editing/deleting, pagination, replies, delivered receipts, read receipts, WebSocket realtime events, device-token registration, and Firebase push notification sending.
+
+## Current backend status
+
+This is the current backend state after the latest test:
+
+```txt
+Backend core: working
+App integration: ready
+Production backend: mostly ready, but still needs real notification testing and later hardening
+```
+
+Tested successfully:
+
+```txt
+/register
+/login
+/me
+/users/search
+/devices/register
+/chats
+/chats/{chat_id}
+/messages
+/messages/{chat_id}
+/messages/{message_id}
+/messages/{message_id}/delivered
+/messages/{message_id}/read
+/messages/{message_id}/reads
+/chats/{chat_id}/read
+/groups
+/groups/{chat_id}/members
+/groups/{chat_id}/members/{user_id}/role
+/groups/{chat_id}/leave
+WebSocket message sending
+```
+
+Still needs real-device testing:
+
+```txt
+Firebase notification delivery with a real Android/Web FCM token
+Render Firebase env variable setup
+Flutter app FCM token registration
+Website FCM token registration later
+```
+
+## Backend folder structure
+
+Current important backend structure:
+
+```txt
+Backend/
+  main.py
+
+  src/
+    .env                       # local only, ignored by git
+    database.py
+    auth.py
+    security.py
+    util.py
+    notifications.py
+    firebase-service-account.json    # local only, ignored by git
+
+    public_routes/
+      login.py
+      register.py
+
+    private_routes/
+      chat.py
+      devices.py
+      groups.py
+      me.py
+      messages.py
+      users.py
+      websocket.py
+```
 
 ## Common rule for private routes
 
@@ -12,16 +88,89 @@ Authorization: Bearer YOUR_TOKEN_HERE
 
 The token is created during login and checked by `check_token()`.
 
+## Environment variables
+
+### Local PC
+
+Local development uses:
+
+```txt
+Backend/src/.env
+```
+
+Important local `.env` keys:
+
+```txt
+DATABASE_NAME=postgres
+DATABASE_USER=...
+DATABASE_PASSWORD=...
+DATABASE_HOST=...
+DATABASE_PORT=...
+TOKEN_SECRET_KEY=...
+ACCESS_TOKEN_EXPIRE_MINUTES=...
+```
+
+For Firebase locally, the backend can use:
+
+```txt
+Backend/src/firebase-service-account.json
+```
+
+This file must never be pushed to GitHub.
+
+### Render
+
+Render uses Environment Variables from the Render dashboard.
+
+Required Render variables:
+
+```txt
+DATABASE_NAME
+DATABASE_USER
+DATABASE_PASSWORD
+DATABASE_HOST
+DATABASE_PORT
+TOKEN_SECRET_KEY
+ACCESS_TOKEN_EXPIRE_MINUTES
+FIREBASE_SERVICE_ACCOUNT_JSON
+```
+
+`FIREBASE_SERVICE_ACCOUNT_JSON` should contain the full Firebase service account JSON content.
+
+Do not manually edit the `\n` inside the private key. Copy and paste the JSON exactly.
+
+## Git ignore safety
+
+The project ignores secrets and local generated files.
+
+Important ignored files:
+
+```gitignore
+.env
+*.env
+*.json
+__pycache__/
+```
+
+This means these should not be pushed:
+
+```txt
+Backend/src/.env
+Backend/src/firebase-service-account.json
+Backend/src/chattify-...firebase-adminsdk...json
+```
+
 ## Main database tables
 
-| Table           | Purpose                                                                                               |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| `users`         | Stores username, email, hashed password, and creation time.                                           |
-| `chats`         | Stores private chats and group chats. `is_group = false` means private chat, `true` means group chat. |
-| `chat_members`  | Stores which users are inside each chat, group roles, and delete-for-me state.                        |
-| `messages`      | Stores messages, soft-delete state, edit state, and optional reply target.                            |
-| `message_reads` | Stores read receipts. One row means one user read one message.                                        |
-| `user_devices`  | Stores Firebase/device tokens for future push notifications.                                          |
+| Table                | Purpose                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `users`              | Stores username, email, hashed password, and creation time.                                           |
+| `chats`              | Stores private chats and group chats. `is_group = false` means private chat, `true` means group chat. |
+| `chat_members`       | Stores which users are inside each chat, group roles, and delete-for-me state.                        |
+| `messages`           | Stores text/GIF messages, soft-delete state, edit state, reply target, and media fields.              |
+| `message_reads`      | Stores read receipts. One row means one user read one message.                                        |
+| `message_deliveries` | Stores delivered receipts. One row means one user received one message.                               |
+| `user_devices`       | Stores Firebase/device tokens for Android, iOS, or web push notifications.                            |
 
 ## Public routes
 
@@ -142,7 +291,9 @@ If already exists:
 
 ### `GET /chats`
 
-Returns all private chats for the current user. Deleted-for-me chats are hidden. The response includes last message preview and unread count.
+Returns all private chats for the current user. Deleted-for-me chats are hidden.
+
+The response includes last message preview and unread count.
 
 Success:
 
@@ -162,6 +313,12 @@ Success:
     }
   ]
 }
+```
+
+For GIF messages, frontend can show the last message as something like:
+
+```txt
+GIF
 ```
 
 ### `GET /chats/{chat_id}`
@@ -216,43 +373,105 @@ Success:
 
 ### `POST /messages`
 
-Sends a message. Supports normal messages and reply messages.
+Sends a message. Supports normal text messages, GIF messages, and reply messages.
 
-Normal message body:
+Text message body:
 
 ```json
 {
   "chat_id": 1,
-  "message_text": "hello bro"
+  "message_text": "hello bro",
+  "message_type": "text"
 }
 ```
 
-Reply message body:
+Reply text message body:
 
 ```json
 {
   "chat_id": 1,
   "message_text": "yes bro",
-  "reply_to_message_id": 10
+  "reply_to_message_id": 10,
+  "message_type": "text"
 }
 ```
 
-Checks token, chat existence, membership, message text, and if replying, checks that the replied message exists in the same chat.
+GIF message body:
+
+```json
+{
+  "chat_id": 1,
+  "message_text": "",
+  "message_type": "gif",
+  "media_url": "https://media.tenor.com/example.gif",
+  "preview_url": "https://media.tenor.com/example-preview.gif"
+}
+```
+
+GIF reply body:
+
+```json
+{
+  "chat_id": 1,
+  "message_text": "",
+  "reply_to_message_id": 10,
+  "message_type": "gif",
+  "media_url": "https://media.tenor.com/example.gif",
+  "preview_url": "https://media.tenor.com/example-preview.gif"
+}
+```
+
+Rules:
+
+```txt
+message_type can be text or gif
+text messages must have non-empty message_text
+gif messages must have media_url
+reply_to_message_id must point to a message in the same chat
+sender must be a member of the chat
+```
 
 Success:
 
 ```json
 {
   "message": "message sent",
-  "message_id": 20
+  "message_id": 20,
+  "chat_id": 1,
+  "sender_id": 3,
+  "message_text": "hello bro",
+  "message_type": "text",
+  "media_url": "",
+  "preview_url": "",
+  "reply_to_message_id": null,
+  "notification": {
+    "sent": 0,
+    "failed": 0,
+    "reason": "no device tokens"
+  }
 }
 ```
 
+The `notification` object tells whether Firebase push sending happened. If no receiver has registered device tokens, `sent` will be `0`.
+
 ### `GET /messages/{chat_id}?limit=50&offset=0`
 
-Fetches messages from a chat with pagination. It returns newest messages first because of descending order. Frontend can use `offset` to load older messages when scrolling up.
+Fetches messages from a chat with pagination.
 
-Response includes edit state, delete state, read count, and reply preview.
+It returns newest messages first because of descending order. Frontend can use `offset` to load older messages when scrolling up.
+
+Response includes:
+
+```txt
+edit state
+delete state
+read_count
+delivery_count
+reply preview
+message_type
+media_url
+preview_url
+```
 
 Success:
 
@@ -272,26 +491,53 @@ Success:
       "is_edited": false,
       "edited_at": null,
       "read_count": 1,
+      "delivery_count": 1,
       "reply_to": {
         "message_id": 10,
         "sender_id": 2,
         "sender_username": "zoro",
-        "message_text": "are you coming?"
-      }
+        "message_text": "are you coming?",
+        "message_type": "text",
+        "media_url": "",
+        "preview_url": ""
+      },
+      "message_type": "text",
+      "media_url": "",
+      "preview_url": ""
     }
   ]
 }
 ```
 
-If a message is soft-deleted, its text is returned as:
+Deleted messages are returned with safe placeholder content:
 
 ```txt
 this message was deleted
 ```
 
+For deleted messages:
+
+```json
+{
+  "message_text": "this message was deleted",
+  "message_type": "text",
+  "media_url": "",
+  "preview_url": ""
+}
+```
+
 ### `PATCH /messages/{message_id}`
 
-Edits a message. Only the sender can edit. Deleted messages cannot be edited. Messages can only be edited within 5 minutes.
+Edits a message.
+
+Rules:
+
+```txt
+Only sender can edit
+Deleted messages cannot be edited
+Messages can only be edited within 5 minutes
+Message text cannot be empty
+```
 
 Request body:
 
@@ -321,11 +567,48 @@ Success:
 }
 ```
 
+## Delivered receipt routes
+
+### `POST /messages/{message_id}/delivered`
+
+Marks one message as delivered for the current user.
+
+Rules:
+
+```txt
+Sender's own message is skipped
+Deleted messages are skipped
+User must be a member of the chat
+Duplicate delivery rows are ignored
+```
+
+Success when newly marked:
+
+```json
+{
+  "message": "message marked as delivered",
+  "marked": true
+}
+```
+
+If already marked:
+
+```json
+{
+  "message": "message already marked as delivered",
+  "marked": false
+}
+```
+
 ## Read receipt routes
 
 ### `POST /chats/{chat_id}/read`
 
-Marks all unread messages in a chat as read for the current user. Own messages and deleted messages are skipped.
+Marks all unread messages in a chat as read for the current user.
+
+Own messages and deleted messages are skipped.
+
+This also marks those messages as delivered first.
 
 Success:
 
@@ -338,7 +621,9 @@ Success:
 
 ### `POST /messages/{message_id}/read`
 
-Marks one message as read for the current user. Own messages do not need read receipts.
+Marks one message as read for the current user.
+
+This also marks the message as delivered first.
 
 Success:
 
@@ -488,7 +773,16 @@ Success:
 
 ### `PATCH /groups/{chat_id}/members/{user_id}/role`
 
-Changes a member role. Only admins can change roles. Allowed roles are `admin` and `member`. Last admin cannot be demoted.
+Changes a member role. Only admins can change roles.
+
+Allowed roles:
+
+```txt
+admin
+member
+```
+
+Last admin cannot be demoted.
 
 Request body:
 
@@ -508,7 +802,15 @@ Success:
 
 ### `DELETE /groups/{chat_id}/members/{user_id}`
 
-Removes a member from a group. Only admins can remove members. Admin cannot remove themselves using this route, and the last admin cannot be removed.
+Removes a member from a group.
+
+Rules:
+
+```txt
+Only admins can remove members
+Admin cannot remove themselves using this route
+Last admin cannot be removed
+```
 
 Success:
 
@@ -520,7 +822,14 @@ Success:
 
 ### `DELETE /groups/{chat_id}/leave`
 
-Current user leaves a group. If they are the last member, the group is deleted. If they are the only admin, they must assign another admin first.
+Current user leaves a group.
+
+Rules:
+
+```txt
+If they are the last member, the group is deleted
+If they are the only admin, they must assign another admin first
+```
 
 Success:
 
@@ -568,7 +877,9 @@ Request body:
 Allowed platforms:
 
 ```txt
-android, ios, web
+android
+ios
+web
 ```
 
 Success:
@@ -579,22 +890,91 @@ Success:
 }
 ```
 
-## WebSocket route
+Purpose:
 
-### `WS /ws/{chat_id}?token=TOKEN_HERE`
+```txt
+Android app registers FCM token here
+Website registers browser FCM token here later
+Backend uses tokens from user_devices to send notifications
+```
 
-Used for realtime chat events. User must be a member of the chat.
+## Push notification behavior
 
-Supported incoming event types:
+Notifications are sent from backend after messages are created through:
 
-### Message event
+```txt
+POST /messages
+WebSocket type=message
+```
 
-Normal message:
+Notification title:
+
+```txt
+Private chat: sender username
+Group chat: group name
+```
+
+Notification body:
+
+```txt
+Private text: message text
+Private GIF: sent a GIF
+Group text: sender_username: message text
+Group GIF: sender_username: sent a GIF
+```
+
+Notification data payload:
 
 ```json
 {
   "type": "message",
-  "message_text": "hello"
+  "chat_id": "1",
+  "message_id": "20",
+  "sender_id": "3",
+  "message_type": "text"
+}
+```
+
+If Firebase is not configured or no tokens exist, the message still sends normally. Notification failure does not break chat.
+
+## WebSocket route
+
+### `WS /ws/{chat_id}?token=TOKEN_HERE`
+
+Used for realtime chat events.
+
+User must be a member of the chat.
+
+Supported incoming event types:
+
+```txt
+message
+typing
+delivered
+read_receipt
+```
+
+### WebSocket message event
+
+Text message:
+
+```json
+{
+  "type": "message",
+  "message_text": "hello",
+  "message_type": "text"
+}
+```
+
+GIF message:
+
+```json
+{
+  "type": "message",
+  "message_text": "",
+  "message_type": "gif",
+  "media_url": "https://media.tenor.com/example.gif",
+  "preview_url": "https://media.tenor.com/example-preview.gif"
 }
 ```
 
@@ -604,6 +984,7 @@ Reply message:
 {
   "type": "message",
   "message_text": "yes bro",
+  "message_type": "text",
   "reply_to_message_id": 10
 }
 ```
@@ -626,12 +1007,20 @@ Broadcast response:
     "message_id": 10,
     "sender_id": 2,
     "sender_username": "zoro",
-    "message_text": "are you coming?"
-  }
+    "message_text": "are you coming?",
+    "message_type": "text",
+    "media_url": "",
+    "preview_url": ""
+  },
+  "message_type": "text",
+  "media_url": "",
+  "preview_url": "",
+  "read_count": 0,
+  "delivery_count": 0
 }
 ```
 
-### Typing event
+### WebSocket typing event
 
 Incoming:
 
@@ -652,7 +1041,31 @@ Broadcast response:
 }
 ```
 
-### Read receipt event
+### WebSocket delivered event
+
+Incoming:
+
+```json
+{
+  "type": "delivered",
+  "message_id": 20
+}
+```
+
+Broadcast response:
+
+```json
+{
+  "type": "delivered",
+  "chat_id": 1,
+  "message_id": 20,
+  "user_id": 3,
+  "username": "scar",
+  "marked": true
+}
+```
+
+### WebSocket read receipt event
 
 Incoming:
 
@@ -662,6 +1075,8 @@ Incoming:
   "message_id": 20
 }
 ```
+
+This also marks the message as delivered first.
 
 Broadcast response:
 
@@ -676,7 +1091,7 @@ Broadcast response:
 }
 ```
 
-### Online/offline events
+### WebSocket online/offline events
 
 When a user connects, other users in the same chat get:
 
@@ -702,17 +1117,16 @@ When a user disconnects, other users in the same chat get:
 
 ## Helper files
 
-| File          | Purpose                                          |
-| ------------- | ------------------------------------------------ |
-| `auth.py`     | Creates JWT tokens and checks tokens.            |
-| `database.py` | Opens PostgreSQL connection using `.env` values. |
-| `security.py` | Validates username and email format.             |
-| `util.py`     | Hashes passwords and verifies passwords.         |
-| `devices.py`  | Stores Firebase/device tokens.                   |
+| File               | Purpose                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth.py`          | Creates JWT tokens and checks tokens.                                                                                                      |
+| `database.py`      | Opens PostgreSQL connection using `.env` locally or Render env variables in production. Uses `connect_timeout=10` and `sslmode="require"`. |
+| `security.py`      | Validates username and email format.                                                                                                       |
+| `util.py`          | Hashes passwords and verifies passwords.                                                                                                   |
+| `devices.py`       | Stores Firebase/device tokens.                                                                                                             |
+| `notifications.py` | Loads Firebase Admin SDK, reads local JSON or Render env JSON, finds receiver device tokens, and sends push notifications.                 |
 
-## Current MVP status
-
-Completed backend features:
+## Current MVP completed backend features
 
 - Registration
 - Login with email or username
@@ -725,18 +1139,77 @@ Completed backend features:
 - Message pagination
 - Last message preview
 - Unread count
+- Replies
+- Text messages
+- GIF messages
 - Read receipts
-- Reply to message
+- Delivered receipts
 - WebSocket realtime messaging
 - WebSocket typing indicator
 - WebSocket online/offline events
+- WebSocket delivered receipts
 - WebSocket read receipts
-- Device-token registration for push notifications
+- Device-token registration
+- Firebase push notification helper
+- Render-compatible Firebase env loading
 
-Not included in MVP:
+## Not included in MVP
 
 - File sharing
 - Voice messages
 - Reactions
 - Block/report
 - Full end-to-end encryption
+- Proper rate limiting
+- Real online/offline presence across whole app
+- Full production abuse protection
+
+## App integration checklist
+
+The Flutter app should use:
+
+```txt
+POST /login
+POST /register
+GET /me
+GET /users/search
+POST /chats
+GET /chats
+GET /chats/{chat_id}
+GET /messages/{chat_id}?limit=50&offset=0
+POST /messages
+PATCH /messages/{message_id}
+DELETE /messages/{message_id}
+POST /messages/{message_id}/delivered
+POST /messages/{message_id}/read
+POST /chats/{chat_id}/read
+GET /messages/{message_id}/reads
+POST /devices/register
+WS /ws/{chat_id}?token=TOKEN
+```
+
+For realtime app chat, main sending should use WebSocket `type=message`.
+
+`POST /messages` can be used as fallback when WebSocket is disconnected.
+
+## Website integration note
+
+The future website can use the same backend.
+
+For browser notifications later:
+
+```txt
+Website gets browser FCM token
+Website calls POST /devices/register with platform = web
+Backend sends to that token exactly like Android
+```
+
+The website will need:
+
+```txt
+Firebase web app config
+firebase-messaging-sw.js
+Notification permission request
+getToken()
+HTTPS in production
+```
