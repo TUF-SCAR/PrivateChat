@@ -181,19 +181,35 @@ class _MessageBubbleState extends State<MessageBubble>
                           borderRadius: BorderRadius.circular(12),
                           border: Border(left: BorderSide(color: message.isMe ? Colors.white : theme.primary, width: 3)),
                         ),
-                        child: Text(message.replyTo!.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTextColor, fontSize: 12)),
+                        child: Text(message.replyTo!.isGif ? 'GIF' : message.replyTo!.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTextColor, fontSize: 12)),
                       ),
                     ],
-                    Text(
-                      message.isDeleted ? 'this message was deleted' : message.text,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: 15,
-                        fontStyle: message.isDeleted ? FontStyle.italic : FontStyle.normal,
-                        height: 1.25,
-                        fontWeight: widget.isSearchHit ? FontWeight.w800 : FontWeight.w400,
+                    if (message.isGif && !message.isDeleted && message.mediaUrl.isNotEmpty)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          message.mediaUrl,
+                          width: 220,
+                          height: 165,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          loadingBuilder: (context, child, progress) => progress == null
+                              ? child
+                              : Container(width: 220, height: 165, alignment: Alignment.center, color: theme.inputFill, child: CircularProgressIndicator(strokeWidth: 2, color: theme.primary)),
+                          errorBuilder: (_, __, ___) => Container(width: 220, height: 120, alignment: Alignment.center, color: theme.inputFill, child: Text('GIF unavailable', style: TextStyle(color: subTextColor))),
+                        ),
+                      )
+                    else
+                      Text(
+                        message.isDeleted ? 'this message was deleted' : message.text,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 15,
+                          fontStyle: message.isDeleted ? FontStyle.italic : FontStyle.normal,
+                          height: 1.25,
+                          fontWeight: widget.isSearchHit ? FontWeight.w800 : FontWeight.w400,
+                        ),
                       ),
-                    ),
                     SizedBox(height: 5),
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -205,7 +221,7 @@ class _MessageBubbleState extends State<MessageBubble>
                         Text(_timeText(message.createdAt), style: TextStyle(fontSize: 11, color: subTextColor)),
                         if (message.isMe) ...[
                           SizedBox(width: 4),
-                          Icon(message.isRead ? Icons.done_all : Icons.done, size: 15, color: subTextColor),
+                          Icon(message.isRead || message.isDelivered ? Icons.done_all : Icons.done, size: 15, color: message.isRead ? Colors.lightBlueAccent : subTextColor),
                         ],
                       ],
                     ),

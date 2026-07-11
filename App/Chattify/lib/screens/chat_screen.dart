@@ -4,6 +4,7 @@ import 'package:characters/characters.dart';
 import 'package:chattify/models/ui_chat.dart';
 import 'package:chattify/services/auth_service.dart';
 import 'package:chattify/services/message_service.dart';
+import 'package:chattify/services/chat_socket_service.dart';
 import 'package:chattify/services/local_store.dart';
 import 'package:chattify/services/app_cache_service.dart';
 import 'package:chattify/models/ui_message.dart';
@@ -14,6 +15,7 @@ import 'package:chattify/widgets/chat_avatar.dart';
 import 'package:chattify/widgets/chat_background.dart';
 import 'package:chattify/widgets/message_bubble.dart';
 import 'package:chattify/utils/emoji_search_index.dart';
+import 'dart:async';
 
 class ChatScreen extends StatefulWidget {
   final UiChat chat;
@@ -53,12 +55,20 @@ class _ChatScreenState extends State<ChatScreen> {
   bool isLoadingMessages = true;
   String? messageError;
   int currentUserId = 0;
+  final ChatSocketService socketService = ChatSocketService();
+  StreamSubscription<Map<String, dynamic>>? socketSubscription;
+  bool socketReady = false;
+  bool peerOnline = false;
+  String? typingUsername;
+  Timer? typingTimer;
+  DateTime lastTypingSent = DateTime.fromMillisecondsSinceEpoch(0);
 
 
   @override
   void initState() {
     super.initState();
     loadRecentEmojis();
+    messageController.addListener(_handleTyping);
     loadMessages();
   }
 
@@ -80,6 +90,85 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
 
+  Future<void> connectSocket() async {
+    try {
+      await socketService.connect(widget.chat.chatId);
+      socketSubscription?.cancel();
+      socketSubscription = socketService.events.listen(_handleSocketEvent);
+      if (!mounted) return;
+      setState(() => socketReady = true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => socketReady = false);
+    }
+  }
+
+  void _handleTyping() {
+    if (!socketReady || messageController.text.trim().isEmpty) return;
+    final now = DateTime.now();
+    if (now.difference(lastTypingSent).inMilliseconds < 1200) return;
+    lastTypingSent = now;
+    try { socketService.sendTyping(); } catch (_) {}
+  }
+
+  void _handleSocketEvent(Map<String, dynamic> event) {
+    if (!mounted) return;
+    final type = event['type']?.toString();
+    if (type == 'message') {
+      final incoming = UiMessage.fromJson(event, currentUserId: currentUserId);
+      setState(() {
+        final index = messages.indexWhere((m) => m.id == incoming.id);
+        if (index >= 0) {
+          messages[index] = incoming;
+        } else {
+          messages.add(incoming);
+          messages = sortMessagesOldestToNewest(messages);
+        }
+      });
+      AppCacheService.saveMessages(chatId: widget.chat.chatId, messages: messages);
+      if (!incoming.isMe) {
+        try {
+          socketService.sendDelivered(incoming.id);
+          socketService.sendRead(incoming.id);
+        } catch (_) {}
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => jumpToBottom());
+    } else if (type == 'delivered') {
+      final id = int.tryParse(event['message_id'].toString());
+      if (id != null) _updateReceipt(id, delivered: true);
+    } else if (type == 'read_receipt') {
+      final id = int.tryParse(event['message_id'].toString());
+      if (id != null) _updateReceipt(id, delivered: true, read: true);
+    } else if (type == 'online') {
+      if (!widget.chat.isGroup && event['user_id'] != currentUserId) setState(() => peerOnline = true);
+    } else if (type == 'offline') {
+      if (!widget.chat.isGroup && event['user_id'] != currentUserId) setState(() => peerOnline = false);
+    } else if (type == 'typing') {
+      if (event['user_id'] == currentUserId) return;
+      setState(() => typingUsername = event['username']?.toString());
+      typingTimer?.cancel();
+      typingTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() => typingUsername = null);
+      });
+    } else if (type == 'socket_closed' || type == 'socket_error') {
+      setState(() => socketReady = false);
+    }
+  }
+
+  void _updateReceipt(int messageId, {bool delivered = false, bool read = false}) {
+    final index = messages.indexWhere((m) => m.id == messageId);
+    if (index < 0) return;
+    final old = messages[index];
+    setState(() {
+      messages[index] = old.copyWith(
+        isDelivered: delivered || old.isDelivered,
+        isRead: read || old.isRead,
+        deliveryCount: delivered ? (old.deliveryCount < 1 ? 1 : old.deliveryCount) : old.deliveryCount,
+        readCount: read ? (old.readCount < 1 ? 1 : old.readCount) : old.readCount,
+      );
+    });
+  }
+
   Future<void> loadMessages() async {
     setState(() {
       isLoadingMessages = messages.isEmpty;
@@ -97,6 +186,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       currentUserId = await AuthService.currentUserId() ?? (await AuthService.getMe()).id;
+      if (!socketReady) await connectSocket();
       final loaded = await MessageService.getMessages(chatId: widget.chat.chatId, currentUserId: currentUserId);
       await MessageService.markChatAsRead(widget.chat.chatId);
       await AppCacheService.saveMessages(chatId: widget.chat.chatId, messages: loaded);
@@ -194,12 +284,12 @@ class _ChatScreenState extends State<ChatScreen> {
       showGifKeyboard = false;
     });
     try {
-      await MessageService.sendMessage(
-        chatId: widget.chat.chatId,
-        text: text,
-        replyToMessageId: reply?.id,
-      );
-      await loadMessages();
+      if (socketService.isConnected) {
+        socketService.sendText(text: text, replyToMessageId: reply?.id);
+      } else {
+        await MessageService.sendText(chatId: widget.chat.chatId, text: text, replyToMessageId: reply?.id);
+        await loadMessages();
+      }
     } catch (error) {
       showSnack(error.toString());
     }
@@ -213,15 +303,28 @@ class _ChatScreenState extends State<ChatScreen> {
       showEmojiPanel = false;
     });
     try {
-      await MessageService.sendMessage(
-        chatId: widget.chat.chatId,
-        text: '[GIF: $label]',
-        replyToMessageId: reply?.id,
-      );
-      await loadMessages();
+      final gif = _gifForLabel(label);
+      if (socketService.isConnected) {
+        socketService.sendGif(mediaUrl: gif.$1, previewUrl: gif.$2, replyToMessageId: reply?.id);
+      } else {
+        await MessageService.sendGif(chatId: widget.chat.chatId, mediaUrl: gif.$1, previewUrl: gif.$2, replyToMessageId: reply?.id);
+        await loadMessages();
+      }
     } catch (error) {
       showSnack(error.toString());
     }
+  }
+
+  (String, String) _gifForLabel(String label) {
+    const gifs = <String, (String, String)>{
+      'happy dance': ('https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/200_s.gif'),
+      'anime shock': ('https://media.giphy.com/media/GRk3GLfzduq1NtfGt5/giphy.gif', 'https://media.giphy.com/media/GRk3GLfzduq1NtfGt5/200_s.gif'),
+      'typing fast': ('https://media.giphy.com/media/13GIgrGdslD9oQ/giphy.gif', 'https://media.giphy.com/media/13GIgrGdslD9oQ/200_s.gif'),
+      'mission passed': ('https://media.giphy.com/media/a0h7sAqON67nO/giphy.gif', 'https://media.giphy.com/media/a0h7sAqON67nO/200_s.gif'),
+      'bruh moment': ('https://media.giphy.com/media/ji6zzUZwNIuLS/giphy.gif', 'https://media.giphy.com/media/ji6zzUZwNIuLS/200_s.gif'),
+      'demon mode': ('https://media.giphy.com/media/yr7n0u3qzO9nG/giphy.gif', 'https://media.giphy.com/media/yr7n0u3qzO9nG/200_s.gif'),
+    };
+    return gifs[label] ?? ('https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif', 'https://media.giphy.com/media/3o7aD2saalBwwftBIY/200_s.gif');
   }
 
   void startReply(UiMessage message) {
@@ -278,8 +381,8 @@ class _ChatScreenState extends State<ChatScreen> {
             SizedBox(height: 14),
             _actionTile(theme, icon: Icons.reply_rounded, title: 'Reply', onTap: () { Navigator.pop(context); startReply(message); }),
             _actionTile(theme, icon: isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded, title: isPinned ? 'Unpin message' : 'Pin message', onTap: () { Navigator.pop(context); setState(() { if (isPinned) pinnedMessageIds.remove(message.id); else pinnedMessageIds.add(message.id); }); }),
-            if (message.isMe && !message.isDeleted) _actionTile(theme, icon: Icons.edit_rounded, title: 'Edit message', onTap: () { Navigator.pop(context); startEdit(message); }),
-            _actionTile(theme, icon: Icons.copy_rounded, title: 'Copy text', onTap: () { Navigator.pop(context); Clipboard.setData(ClipboardData(text: message.text)); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Message copied'))); }),
+            if (message.isMe && !message.isDeleted && !message.isGif) _actionTile(theme, icon: Icons.edit_rounded, title: 'Edit message', onTap: () { Navigator.pop(context); startEdit(message); }),
+            if (!message.isGif) _actionTile(theme, icon: Icons.copy_rounded, title: 'Copy text', onTap: () { Navigator.pop(context); Clipboard.setData(ClipboardData(text: message.text)); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Message copied'))); }),
             if (message.isMe && !message.isDeleted) _actionTile(theme, icon: Icons.delete_outline_rounded, title: 'Delete message', isDanger: true, onTap: () async { Navigator.pop(context); try { await MessageService.deleteMessage(message.id); await loadMessages(); } catch (error) { showSnack(error.toString()); } }),
           ]),
         );
@@ -1324,7 +1427,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   decoration: BoxDecoration(color: chatTheme.background, border: Border(bottom: BorderSide(color: chatTheme.border))),
                   child: Row(children: [
                     IconButton(onPressed: () { FocusManager.instance.primaryFocus?.unfocus(); Navigator.pop(context); }, icon: Icon(Icons.arrow_back_rounded, color: chatTheme.text)),
-                    InkWell(borderRadius: BorderRadius.circular(18), onTap: openSettings, child: Row(children: [ChatAvatar(initials: widget.chat.initials, isGroup: widget.chat.isGroup, isOnline: widget.chat.isOnline, radius: 22), SizedBox(width: 10)])),
+                    InkWell(borderRadius: BorderRadius.circular(18), onTap: openSettings, child: Row(children: [ChatAvatar(initials: widget.chat.initials, isGroup: widget.chat.isGroup, isOnline: peerOnline, radius: 22), SizedBox(width: 10)])),
                     Expanded(
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
@@ -1332,7 +1435,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(widget.chat.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: chatTheme.text, fontSize: 17, fontWeight: FontWeight.w900)),
                           SizedBox(height: 2),
-                          Text(widget.chat.isGroup ? 'Tap for group info' : widget.chat.isOnline ? 'Online' : 'Tap for chat info', style: TextStyle(color: widget.chat.isOnline ? AppColors.success : chatTheme.muted, fontSize: 12, fontWeight: FontWeight.w700)),
+                          Text(widget.chat.isGroup ? (typingUsername != null ? '$typingUsername is typing…' : 'Tap for group info') : typingUsername != null ? 'typing…' : peerOnline ? 'Online' : 'Tap for chat info', style: TextStyle(color: (peerOnline || typingUsername != null) ? AppColors.success : chatTheme.muted, fontSize: 12, fontWeight: FontWeight.w700)),
                         ]),
                       ),
                     ),
@@ -1360,6 +1463,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    typingTimer?.cancel();
+    socketSubscription?.cancel();
+    socketService.dispose();
+    messageController.removeListener(_handleTyping);
     messageController.dispose();
     searchController.dispose();
     gifSearchController.dispose();
